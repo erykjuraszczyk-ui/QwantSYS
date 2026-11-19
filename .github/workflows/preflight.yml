@@ -1,0 +1,55 @@
+name: QwantSYS preflight
+
+on:
+  push:
+    branches:
+      - main
+      - qwantSYS-0.1.0-foundation
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Qwant Core manifest XML
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          manifest = Path("qwant/core/AndroidManifest.xml")
+          if not manifest.is_file():
+              raise SystemExit(f"Missing: {manifest}")
+
+          root = ET.parse(manifest).getroot()
+          if root.tag != "manifest":
+              raise SystemExit("AndroidManifest.xml root must be <manifest>")
+
+          if root.attrib.get("package") != "com.qwant.core":
+              raise SystemExit("Unexpected Qwant Core package name")
+
+          services = root.findall("./application/service")
+          if len(services) != 1:
+              raise SystemExit("Expected exactly one local service")
+
+          if services[0].attrib.get("{http://schemas.android.com/apk/res/android}exported") != "false":
+              raise SystemExit("Qwant Core service must not be exported")
+
+          print("Qwant Core manifest: OK")
+          PY
+
+      - name: Check required project files
+        run: |
+          test -s README.md
+          test -s docs/ARCHITECTURE.md
+          test -s docs/PROJECT_STATUS.md
+          test -s docs/DEVICE_BRINGUP_NX679J.md
+          test -s qwant/core/Android.bp
+          test -s qwant/core/src/com/qwant/core/QwantCoreService.java
