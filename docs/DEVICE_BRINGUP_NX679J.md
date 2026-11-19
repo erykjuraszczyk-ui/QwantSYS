@@ -97,3 +97,37 @@ Nie kopiuj BoardConfig ani vendor blobs z innego modelu tylko dlatego, że urzą
 ## 7. Bramka decyzyjna
 
 Dalsze prace nad BoardConfig i produktem ROM można rozpocząć dopiero wtedy, gdy dane z punktu 2 są znane, a źródła z punktu 3 zostały zweryfikowane. Do tego czasu katalog device zawiera wyłącznie dokumentację i szablony, a nie aktywną konfigurację urządzenia.
+
+
+## 8. Wyniki diagnostyki Termux — raport użytkownika
+
+Raport został wygenerowany lokalnie w Termux na urządzeniu docelowym.
+
+| Właściwość | Odczyt |
+|---|---|
+| `ro.product.model` | `NX679J` |
+| `ro.product.device` | `NX679J-EEA` |
+| `ro.hardware` | `qcom` |
+| `ro.boot.hardware` | `qcom` |
+| `ro.build.version.release` | `13` |
+| `ro.build.version.sdk` | `33` |
+| `ro.build.fingerprint` | `nubia/NX679J-EEA/NX679J-EEA:13/TKQ1.221013.002/eng.nubia.20241108.103936:user/release-keys` |
+| `ro.vendor.build.fingerprint` | `nubia/NX679J-EEA/NX679J-EEA:12/SKQ1.211113.001/eng.nubia.20241108.105108:user/release-keys` |
+| `ro.boot.slot_suffix` | `_a` |
+| `ro.boot.verifiedbootstate` | `green` |
+| `uname -a` | `Linux localhost 5.10.101-android12-9-00001-gf4c0e37dbcde-ab8596533 #1 SMP PREEMPT Mon May 16 05:21:23 UTC 2022 aarch64 Android` |
+| `/proc/partitions` | brak widocznych wpisów w raporcie |
+
+### Interpretacja i ograniczenia
+
+- Wariant urządzenia `NX679J-EEA` jest potwierdzony przez właściwości systemowe.
+- System raportuje Android 13 / API 33.
+- System raportuje aktywny slot `_a`; pełny schemat A/B nie został jeszcze potwierdzony.
+- Stan Verified Boot `green` oznacza raportowany stan zweryfikowanego rozruchu; nie określa sam w sobie możliwości odblokowania bootloadera.
+- Kernel ma oznaczenie `android12`, mimo że userspace raportuje Android 13. To nie jest samo w sobie dowodem niezgodności.
+- Fingerprint vendor wskazuje bazę Android 12, podczas gdy fingerprint systemu wskazuje Android 13. Wymaga to sprawdzenia zgodności vendor interface, VINTF i HAL; nie wolno z tego wyciągać wniosku o błędzie bez dalszych danych.
+- Brak wpisów z `/proc/partitions` oznacza, że raport nie dostarczył mapy partycji. Nie wolno zgadywać nazw ani rozmiarów partycji.
+
+### Następny bezpieczny odczyt
+
+Zebrać dodatkowe właściwości bootloadera, vendor i partycji zgodnie z poleceniami w dalszej części dokumentacji. Wszystkie polecenia diagnostyczne mają być tylko do odczytu. Nie używać `fastboot flash`, `erase`, `format`, `set_active` ani poleceń wymagających root.
