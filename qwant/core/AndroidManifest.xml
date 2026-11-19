@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.qwant.core">
+
+    <uses-sdk
+        android:minSdkVersion="33" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Qwant Core"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false">
+
+        <service
+            android:name=".QwantCoreService"
+            android:enabled="true"
+            android:exported="false" />
+    </application>
+</manifest>
