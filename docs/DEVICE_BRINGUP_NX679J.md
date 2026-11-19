@@ -27,7 +27,17 @@ Wyniki zapisz lokalnie. Przed publikacją usuń numery seryjne, identyfikatory k
 
 Jeśli ADB nie jest dostępne, nie próbuj obchodzić blokad. Najpierw sprawdź model oraz wersję oprogramowania w ustawieniach telefonu.
 
-## 2. Informacje do zebrania
+## 2. Automatyczne zebranie danych
+
+W repozytorium znajduje się skrypt tylko do odczytu:
+
+```bash
+bash scripts/collect-device-info.sh
+```
+
+Skrypt wymaga ADB, debugowania USB i dokładnie jednego autoryzowanego urządzenia. Zapisuje raport do pliku `qwant-device-info.txt`. Nie wykonuje poleceń flashowania, kasowania ani modyfikacji partycji. Przed wysłaniem raportu sprawdź go i usuń dane prywatne.
+
+## 3. Informacje do zebrania
 
 - pełny numer modelu z ustawień i etykiety urządzenia;
 - fingerprint kompilacji;
@@ -38,7 +48,7 @@ Jeśli ADB nie jest dostępne, nie próbuj obchodzić blokad. Najpierw sprawdź 
 - wersja bootloadera i recovery;
 - dostępne źródła kernela dla dokładnej odmiany.
 
-## 3. Źródła wymagane do portu
+## 4. Źródła wymagane do portu
 
 Port nie może być uznany za gotowy bez:
 
@@ -51,7 +61,7 @@ Port nie może być uznany za gotowy bez:
 
 Nie kopiuj BoardConfig ani vendor blobs z innego modelu tylko dlatego, że urządzenia mają podobny procesor.
 
-## 4. Zasady bezpieczeństwa
+## 5. Zasady bezpieczeństwa
 
 - Na tym etapie nie odblokowuj bootloadera i nie zapisuj żadnych partycji.
 - Nie uruchamiaj poleceń `fastboot flash`, `erase`, `format` ani `set_active`.
@@ -59,6 +69,6 @@ Nie kopiuj BoardConfig ani vendor blobs z innego modelu tylko dlatego, że urzą
 - Nie kasuj danych i nie zmieniaj schematu partycji.
 - Zachowaj oryginalny firmware oraz sprawdzoną ścieżkę odzyskiwania.
 
-## 5. Bramka decyzyjna
+## 6. Bramka decyzyjna
 
 Dalsze prace nad BoardConfig i produktem ROM można rozpocząć dopiero wtedy, gdy dane z punktu 2 są znane, a źródła z punktu 3 zostały zweryfikowane. Do tego czasu katalog device zawiera wyłącznie dokumentację i szablony, a nie aktywną konfigurację urządzenia.
