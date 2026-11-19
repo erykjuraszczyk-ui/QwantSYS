@@ -2,7 +2,7 @@
 
 **Status: experimental project / ROM not yet buildable.**
 
-QwantSYS is a planned Android-based operating system for a specifically validated REDMAGIC device variant. The initial engineering target is the REDMAGIC 7 family, with **NX679J treated as a candidate device identifier only until it is verified on the actual handset and against its firmware**.
+QwantSYS is a planned Android-based operating system for a specifically validated REDMAGIC device variant. The initial engineering target is the user's confirmed **REDMAGIC 7 / NX679J**, with hardware version **NX679J_V1AMB** and build **NX679J_EUCommon_V7.12** as read from the phone's About screen. This confirmation applies to that handset; it does not validate other REDMAGIC 7-family variants.
 
 The first implementation is planned as an AOSP-derived ROM. Qwant components (Core, UI, AI, Memory, Quantum and Game) will be developed as separable system components.
 
