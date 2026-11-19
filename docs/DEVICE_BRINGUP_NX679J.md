@@ -184,3 +184,41 @@ Są to nazwy plików widoczne w katalogu vendor. Ich obecność sama w sobie nie
 ### Konsekwencja dla projektu
 
 Nie przygotowujemy instrukcji flashowania ani obrazu do instalacji. Bootloader jest obecnie zablokowany, a układ partycji i zgodność vendor/AOSP nie zostały potwierdzone. Następny etap pozostaje nieinwazyjnym audytem fingerprintów, właściwości platformy i źródeł firmware/kernel.
+
+
+## 10. Wyniki platform/VINTF — raport Termux
+
+Użytkownik udostępnił kolejny odczyt właściwości platformy oraz początkowe 100 linii `manifest_taro.xml`.
+
+| Właściwość | Odczyt |
+|---|---|
+| `ro.board.platform` | `taro` |
+| `ro.soc.model` | `SM8450` |
+| `ro.soc.manufacturer` | `QTI` |
+| `ro.boot.product.hardware.sku` | `nfc` |
+| `ro.vendor.build.fingerprint` | `nubia/NX679J-EEA/NX679J-EEA:12/SKQ1.211113.001/eng.nubia.20241108.105108:user/release-keys` |
+| `ro.vndk.version` | `31` |
+| `ro.product.first_api_level` | `31` |
+| `ro.treble.enabled` | `true` |
+| `ro.boot.boot_devices` | `soc/1d84000.ufshc` |
+
+### Wnioski oparte na raporcie
+
+- Platforma zgłasza nazwę `taro`, model SoC `SM8450` i producenta `QTI`.
+- Urządzenie raportuje SKU `nfc`.
+- Treble jest włączone.
+- Vendor VNDK i pierwszy poziom API produktu wskazują wartość 31.
+- Ścieżka `ro.boot.boot_devices` wskazuje kontroler UFS `soc/1d84000.ufshc`.
+- `manifest_taro.xml` ma nagłówek `version="4.0"`, `type="device"`, `target-level="6"`.
+- Udostępniony fragment manifestu deklaruje m.in. HIDL audio 7.0, fingerprint 2.1, Bluetooth 1.0, Bluetooth Audio 2.0, Camera Provider 2.7, Gatekeeper 1.0 i Keymaster 4.1. Jest to tylko początkowy fragment pliku, nie pełny spis usług.
+
+### Ograniczenia i następny audyt
+
+- Nie wyciągamy wniosku, że wszystkie manifesty `cape`, `diwali` i `taro` są aktywne. Sam listing plików nie określa, które manifesty są scalane przez VINTF.
+- Nie wyciągamy wniosku, że dowolna gałąź AOSP będzie kompatybilna. Potrzebne są pełne device/framework compatibility matrices, manifesty i dokładna baza firmware.
+- Nazwa platformy `taro` i SoC `SM8450` są zapisane jako odczyty właściwości urządzenia; nie zastępują weryfikacji źródeł kernela i device tree dla NX679J-EEA.
+- Nie ustalono nadal mapy partycji, zawartości `super`, konfiguracji AVB ani źródła zgodnych vendor blobs.
+
+### Status bring-up
+
+Identyfikacja platformy i podstawowych parametrów Treble/VNDK została uzupełniona. Projekt nadal jest na etapie audytu. Nie twórz jeszcze `BoardConfig.mk`, konfiguracji produktu ani obrazu flashowalnego na podstawie samych tych danych.
