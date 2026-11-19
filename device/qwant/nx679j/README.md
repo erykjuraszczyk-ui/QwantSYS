@@ -2,6 +2,20 @@
 
 Ten katalog jest miejscem na przyszłą konfigurację urządzenia. **Nie jest kompletnym device tree i nie może być używany do budowania ani flashowania ROM-u.**
 
+## Potwierdzony cel sprzętowy
+
+Dane odczytane z ekranu „Informacje o telefonie” dla urządzenia użytkownika:
+
+- Nazwa: REDMAGIC 7
+- Model: NX679J
+- Hardware version: NX679J_V1AMB
+- Kompilacja: NX679J_EUCommon_V7.12
+- Android: 13 / REDMAGIC OS 6.0
+- SoC: Snapdragon 8 Gen 1
+- RAM / pamięć: 12 GB / 128 GB
+
+To identyfikuje cel dla tego egzemplarza. Nie potwierdza jeszcze układu partycji, konfiguracji A/B, AVB ani zgodności konkretnych źródeł kernela i vendor.
+
 Przed dodaniem aktywnych plików build systemu należy zweryfikować:
 
 - czy telefon rzeczywiście identyfikuje się jako NX679J;
