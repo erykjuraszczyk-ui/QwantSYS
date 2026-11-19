@@ -45,6 +45,9 @@ jobs:
           print("Qwant Core manifest: OK")
           PY
 
+      - name: Check device collector shell syntax
+        run: bash -n scripts/collect-device-info.sh
+
       - name: Check required project files
         run: |
           test -s README.md
