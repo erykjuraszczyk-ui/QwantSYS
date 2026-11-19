@@ -131,3 +131,56 @@ Raport został wygenerowany lokalnie w Termux na urządzeniu docelowym.
 ### Następny bezpieczny odczyt
 
 Zebrać dodatkowe właściwości bootloadera, vendor i partycji zgodnie z poleceniami w dalszej części dokumentacji. Wszystkie polecenia diagnostyczne mają być tylko do odczytu. Nie używać `fastboot flash`, `erase`, `format`, `set_active` ani poleceń wymagających root.
+
+
+## 9. Wyniki diagnostyki boot/vendor — raport Termux
+
+Drugi raport został przekazany przez użytkownika. Dane są odczytami właściwości Androida i listingu VINTF; dostęp do katalogów blokowych został odmówiony przez system.
+
+| Właściwość | Odczyt |
+|---|---|
+| `ro.boot.flash.locked` | `1` |
+| `ro.boot.vbmeta.device_state` | `locked` |
+| `ro.boot.veritymode` | `enforcing` |
+| `ro.boot.slot_suffix` | `_a` |
+| `ro.boot.verifiedbootstate` | `green` |
+| `ro.boot.dynamic_partitions` | `true` |
+| `ro.boot.super_partition` | pusty |
+| `ro.build.type` | `user` |
+| `ro.build.tags` | `release-keys` |
+| `ro.vendor.build.version.release` | `12` |
+| `ro.vendor.build.version.sdk` | `31` |
+| `ro.product.cpu.abi` | `arm64-v8a` |
+
+### Interpretacja
+
+- Bootloader jest obecnie zgłaszany jako zablokowany (`flash.locked=1`, `vbmeta.device_state=locked`).
+- Verified Boot raportuje stan `green`, a dm-verity tryb `enforcing`.
+- System raportuje dynamic partitions. Wartość pustej właściwości `ro.boot.super_partition` nie dowodzi braku partycji `super`; wymaga osobnej weryfikacji.
+- Aktywny slot raportowany jest jako `_a`. Nie jest to pełny opis mapowania partycji ani dowód wszystkich szczegółów implementacji A/B.
+- Android userspace raportuje API 33, a vendor API 31 / Android 12. To istotny punkt do audytu zgodności framework/vendor i VINTF, ale sam raport nie dowodzi niezgodności.
+- `build.type=user` i `release-keys` opisują typ kompilacji i tagi kluczy; nie potwierdzają możliwości instalowania alternatywnego ROM-u.
+
+### Ograniczenia odczytu partycji
+
+Termux nie ma dostępu do:
+- `/dev/block/by-name`;
+- `/dev/block/bootdevice/by-name`;
+- `/sys/dev/block`.
+
+Odmowa dostępu jest normalnym ograniczeniem uprawnień Androida w nieuprzywilejowanej aplikacji. Nie próbuj obchodzić jej przez root, zmianę polityki SELinux ani modyfikację urządzenia. Mapa partycji pozostaje nieustalona.
+
+### VINTF manifesty widoczne w raporcie
+
+Raport wskazuje pliki:
+- `manifest_cape.xml`;
+- `manifest_diwali.xml`;
+- `manifest_taro.xml`;
+- `manifest/manifest_lahaina_identity.xml`;
+- zestaw manifestów usług QTI, display, GNSS, audio, Wi-Fi, power, thermal, sensors, USB, KeyMint i innych.
+
+Są to nazwy plików widoczne w katalogu vendor. Ich obecność sama w sobie nie potwierdza, które wpisy są aktywne, załadowane lub zgodne z wybraną gałęzią AOSP. Potrzebny jest audyt pełnych manifestów i macierzy kompatybilności dla dokładnego firmware.
+
+### Konsekwencja dla projektu
+
+Nie przygotowujemy instrukcji flashowania ani obrazu do instalacji. Bootloader jest obecnie zablokowany, a układ partycji i zgodność vendor/AOSP nie zostały potwierdzone. Następny etap pozostaje nieinwazyjnym audytem fingerprintów, właściwości platformy i źródeł firmware/kernel.
