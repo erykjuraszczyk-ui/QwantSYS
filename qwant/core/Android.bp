@@ -1,0 +1,10 @@
+android_app {
+    name: "QwantCore",
+    manifest: "AndroidManifest.xml",
+    srcs: [
+        "src/**/*.java",
+    ],
+    sdk_version: "current",
+    min_sdk_version: "33",
+    system_ext_specific: true,
+}
