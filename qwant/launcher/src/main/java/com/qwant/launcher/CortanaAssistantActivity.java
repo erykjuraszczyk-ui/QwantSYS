@@ -5,6 +5,7 @@ import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.Uri;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -32,9 +33,14 @@ import java.util.ArrayList;
 import java.util.Locale;
 import java.util.List;
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -49,6 +55,9 @@ public final class CortanaAssistantActivity extends Activity {
     private static final int WHITE = Color.rgb(239, 246, 255);
     private static final int MUTED = Color.rgb(148, 166, 190);
     private static final int REQUEST_SPEECH = 411;
+    private static final int REQUEST_BACKUP_EXPORT = 412;
+    private static final int REQUEST_BACKUP_IMPORT = 413;
+    private static final int MAX_BACKUP_BYTES = 8 * 1024 * 1024;
     private static final int MAX_HISTORY = 40;
     private static final String MODEL_FILE = "qwen2.5-0.5b-instruct-q4_k_m.gguf";
     private static final String MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true";
@@ -115,6 +124,7 @@ public final class CortanaAssistantActivity extends Activity {
         titleBlock.addView(subtitle);
         header.addView(titleBlock, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         header.addView(smallButton("Pamięć", this::showMemory));
+        header.addView(smallButton("Backup", this::showBackupOptions));
         header.addView(smallButton("Wyczyść", this::confirmClearChat));
         page.addView(header);
         space(page, 12);
@@ -532,6 +542,239 @@ public final class CortanaAssistantActivity extends Activity {
         return result.toString();
     }
 
+
+    private void showBackupOptions() {
+        new AlertDialog.Builder(this)
+                .setTitle("Kopia zapasowa QwantOS")
+                .setItems(new String[]{"Utwórz kopię JSON", "Odtwórz kopię JSON"}, (dialog, which) -> {
+                    if (modelBusy) {
+                        Toast.makeText(this, "Poczekaj na zakończenie bieżącej operacji AI.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (which == 0) startBackupExportPicker();
+                    else startBackupImportPicker();
+                })
+                .setNegativeButton("Zamknij", null)
+                .show();
+    }
+
+    private void startBackupExportPicker() {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        intent.putExtra(Intent.EXTRA_TITLE, "QwantOS-Backup-1.1.0.json");
+        try {
+            startActivityForResult(intent, REQUEST_BACKUP_EXPORT);
+        } catch (RuntimeException ex) {
+            Toast.makeText(this, "Nie można otworzyć zapisu pliku.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void startBackupImportPicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        try {
+            startActivityForResult(intent, REQUEST_BACKUP_IMPORT);
+        } catch (RuntimeException ex) {
+            Toast.makeText(this, "Nie można otworzyć wyboru pliku.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void exportBackup(Uri uri) {
+        modelBusy = true;
+        composer.setEnabled(false);
+        aiExecutor.execute(() -> {
+            String error = null;
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("format", "QWANTOS_BACKUP");
+                payload.put("schema_version", 1);
+                payload.put("created_at", System.currentTimeMillis());
+                payload.put("memories", memoryStore.exportRecords());
+                payload.put("chat_history", readArray("history"));
+
+                SharedPreferences launcher = getSharedPreferences("qwant_launcher", MODE_PRIVATE);
+                JSONObject settings = new JSONObject();
+                settings.put("accent", launcher.getInt("accent", Color.rgb(79, 220, 235)));
+                settings.put("compact", launcher.getBoolean("compact", false));
+                settings.put("clock24", launcher.getBoolean("clock24", true));
+                settings.put("favorites", launcher.getString("favorites", ""));
+                payload.put("launcher_settings", settings);
+
+                String payloadText = payload.toString();
+                JSONObject envelope = new JSONObject();
+                envelope.put("format", "QWANTOS_BACKUP_FILE");
+                envelope.put("payload", payloadText);
+                envelope.put("sha256", sha256(payloadText.getBytes(StandardCharsets.UTF_8)));
+
+                byte[] bytes = envelope.toString().getBytes(StandardCharsets.UTF_8);
+                if (bytes.length > MAX_BACKUP_BYTES) {
+                    throw new IOException("Kopia przekracza limit 8 MiB.");
+                }
+                try (OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
+                    if (output == null) throw new IOException("Nie można otworzyć pliku docelowego.");
+                    output.write(bytes);
+                    output.flush();
+                }
+            } catch (Exception ex) {
+                error = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            }
+            final String result = error;
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                modelBusy = false;
+                composer.setEnabled(true);
+                if (result == null) {
+                    Toast.makeText(this, "Kopia QwantOS została zapisana.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "Błąd kopii: " + result, Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+
+    private void confirmBackupRestore(Uri uri) {
+        new AlertDialog.Builder(this)
+                .setTitle("Odtworzyć kopię QwantOS?")
+                .setMessage("Notatki zostaną scalone bez duplikatów, historia czatu zostanie połączona z obecną historią, a zapisane ustawienia pulpitu zostaną przywrócone. Pobrane modele AI nie są częścią kopii.")
+                .setPositiveButton("Odtwórz", (dialog, which) -> restoreBackup(uri))
+                .setNegativeButton("Anuluj", null)
+                .show();
+    }
+
+    private void restoreBackup(Uri uri) {
+        modelBusy = true;
+        composer.setEnabled(false);
+        aiExecutor.execute(() -> {
+            String error = null;
+            int imported = 0;
+            try {
+                byte[] bytes = readLimited(uri, MAX_BACKUP_BYTES);
+                JSONObject envelope = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
+                if (!"QWANTOS_BACKUP_FILE".equals(envelope.optString("format"))) {
+                    throw new IOException("Nieznany format kopii.");
+                }
+                String payloadText = envelope.optString("payload", "");
+                String expectedHash = envelope.optString("sha256", "");
+                if (payloadText.isEmpty() || !constantTimeEquals(
+                        expectedHash, sha256(payloadText.getBytes(StandardCharsets.UTF_8)))) {
+                    throw new IOException("Suma kontrolna SHA-256 jest nieprawidłowa.");
+                }
+                JSONObject payload = new JSONObject(payloadText);
+                if (!"QWANTOS_BACKUP".equals(payload.optString("format"))
+                        || payload.optInt("schema_version", -1) != 1) {
+                    throw new IOException("Nieobsługiwana wersja kopii.");
+                }
+                JSONArray records = payload.optJSONArray("memories");
+                JSONArray importedHistory = payload.optJSONArray("chat_history");
+                JSONObject launcherSettings = payload.optJSONObject("launcher_settings");
+                if (records == null || records.length() > 500
+                        || importedHistory == null || importedHistory.length() > 100
+                        || launcherSettings == null) {
+                    throw new IOException("Kopia nie zawiera poprawnych sekcji danych.");
+                }
+                String favorites = launcherSettings.optString("favorites", "");
+                if (favorites.length() > 1024 || favorites.split("\\|").length > 4) {
+                    throw new IOException("Nieprawidłowa lista ulubionych aplikacji.");
+                }
+                imported = memoryStore.importRecords(records);
+                mergeChatHistory(importedHistory);
+                restoreLauncherSettings(launcherSettings);
+            } catch (Exception ex) {
+                error = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            }
+            final String result = error;
+            final int count = imported;
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                modelBusy = false;
+                composer.setEnabled(true);
+                refreshEmbeddingUi();
+                if (result == null) {
+                    appendMessage("assistant", "Kopia odtworzona. Dodano " + count
+                            + " nowych wpisów pamięci; historia i ustawienia zostały scalone/przywrócone.", true);
+                    Toast.makeText(this, "Przywracanie zakończone.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "Nie odtworzono kopii: " + result, Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+
+    private byte[] readLimited(Uri uri, int maxBytes) throws IOException {
+        try (InputStream input = getContentResolver().openInputStream(uri);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            if (input == null) throw new IOException("Nie można odczytać wskazanego pliku.");
+            byte[] buffer = new byte[8192];
+            int count;
+            int total = 0;
+            while ((count = input.read(buffer)) != -1) {
+                total += count;
+                if (total > maxBytes) throw new IOException("Plik kopii przekracza limit 8 MiB.");
+                output.write(buffer, 0, count);
+            }
+            return output.toByteArray();
+        }
+    }
+
+    private void mergeChatHistory(JSONArray importedHistory) throws IOException {
+        if (importedHistory == null || importedHistory.length() > 100) {
+            throw new IOException("Nieprawidłowa historia rozmowy w kopii.");
+        }
+        JSONArray merged = new JSONArray();
+        java.util.LinkedHashMap<String, JSONObject> unique = new java.util.LinkedHashMap<>();
+        JSONArray current = readArray("history");
+        for (int source = 0; source < 2; source++) {
+            JSONArray entries = source == 0 ? current : importedHistory;
+            for (int i = 0; i < entries.length(); i++) {
+                JSONObject item = entries.optJSONObject(i);
+                if (item == null) continue;
+                String role = item.optString("role", "");
+                String text = item.optString("text", "");
+                if ((! "user".equals(role) && !"assistant".equals(role)) || text.length() > 12000) continue;
+                JSONObject clean = new JSONObject();
+                try {
+                    clean.put("role", role);
+                    clean.put("text", text);
+                    unique.put(role + "\\u0000" + text, clean);
+                } catch (org.json.JSONException ignored) { }
+            }
+        }
+        for (JSONObject item : unique.values()) merged.put(item);
+        while (merged.length() > MAX_HISTORY) merged.remove(0);
+        preferences.edit().putString("history", merged.toString()).apply();
+    }
+
+    private void restoreLauncherSettings(JSONObject settings) {
+        if (settings == null) return;
+        SharedPreferences launcher = getSharedPreferences("qwant_launcher", MODE_PRIVATE);
+        SharedPreferences.Editor editor = launcher.edit();
+        if (settings.has("accent")) editor.putInt("accent", settings.optInt("accent"));
+        if (settings.has("compact")) editor.putBoolean("compact", settings.optBoolean("compact"));
+        if (settings.has("clock24")) editor.putBoolean("clock24", settings.optBoolean("clock24", true));
+        if (settings.has("favorites")) editor.putString("favorites", settings.optString("favorites", ""));
+        editor.apply();
+    }
+
+    private static String sha256(byte[] value) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(value);
+            StringBuilder out = new StringBuilder(bytes.length * 2);
+            for (byte item : bytes) out.append(String.format(Locale.ROOT, "%02x", item & 0xff));
+            return out.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IOException("SHA-256 nie jest dostępny.", ex);
+        }
+    }
+
+    private static boolean constantTimeEquals(String left, String right) {
+        if (left == null || right == null) return false;
+        return MessageDigest.isEqual(left.getBytes(StandardCharsets.US_ASCII),
+                right.getBytes(StandardCharsets.US_ASCII));
+    }
+
     private void showMemory() {
         List<LocalMemoryStore.Memory> entries = memoryStore.list(30);
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
@@ -864,7 +1107,7 @@ public final class CortanaAssistantActivity extends Activity {
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(25000);
                 connection.setReadTimeout(60000);
-                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/1.0.0");
+                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/1.1.0");
                 connection.setRequestProperty("Accept", "application/octet-stream");
                 int status = connection.getResponseCode();
                 if (status != HttpURLConnection.HTTP_OK) {
@@ -1030,7 +1273,7 @@ public final class CortanaAssistantActivity extends Activity {
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(25000);
                 connection.setReadTimeout(90000);
-                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/1.0.0");
+                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/1.1.0");
                 connection.setRequestProperty("Accept", "application/octet-stream");
                 int status = connection.getResponseCode();
                 if (status != HttpURLConnection.HTTP_OK) {
@@ -1213,6 +1456,14 @@ public final class CortanaAssistantActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_BACKUP_EXPORT && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            exportBackup(data.getData());
+            return;
+        }
+        if (requestCode == REQUEST_BACKUP_IMPORT && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            confirmBackupRestore(data.getData());
+            return;
+        }
         if (requestCode == REQUEST_SPEECH && resultCode == RESULT_OK && data != null) {
             ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (results != null && !results.isEmpty()) {

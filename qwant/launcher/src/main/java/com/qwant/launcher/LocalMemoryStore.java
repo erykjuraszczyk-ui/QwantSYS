@@ -5,11 +5,17 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.util.Base64;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.text.Normalizer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -66,6 +72,101 @@ public final class LocalMemoryStore extends SQLiteOpenHelper {
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE memories ADD COLUMN embedding BLOB");
         }
+    }
+
+
+    /** Exports memory records for an explicit user-controlled backup. */
+    public synchronized JSONArray exportRecords() throws JSONException {
+        JSONArray records = new JSONArray();
+        try (Cursor cursor = getReadableDatabase().query(
+                "memories",
+                new String[]{"category", "body", "created_at", "embedding"},
+                null, null, null, null,
+                "created_at DESC, _id DESC")) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                item.put("category", cursor.getString(0));
+                item.put("body", cursor.getString(1));
+                item.put("created_at", cursor.getLong(2));
+                byte[] embedding = cursor.isNull(3) ? null : cursor.getBlob(3);
+                if (embedding != null && embedding.length == 384 * 4) {
+                    item.put("embedding_b64", Base64.encodeToString(embedding, Base64.NO_WRAP));
+                }
+                records.put(item);
+            }
+        }
+        return records;
+    }
+
+    /**
+     * Merges validated records from a backup. Existing category/body pairs are kept once.
+     * Invalid individual entries are skipped; an invalid backup envelope is rejected by the caller.
+     */
+    public synchronized int importRecords(JSONArray records) {
+        if (records == null) return 0;
+        SQLiteDatabase db = getWritableDatabase();
+        HashSet<String> known = new HashSet<>();
+        for (Memory existing : list(MAX_RECORDS)) {
+            known.add(existing.category + "\\u0000" + existing.body);
+        }
+
+        int inserted = 0;
+        db.beginTransaction();
+        try {
+            int count = Math.min(records.length(), MAX_RECORDS);
+            for (int i = 0; i < count; i++) {
+                JSONObject item = records.optJSONObject(i);
+                if (item == null) continue;
+                String body = item.optString("body", "").trim();
+                String category = item.optString("category", "notatka").trim();
+                if (body.isEmpty() || body.length() > MAX_BODY_LENGTH) continue;
+                if (category.isEmpty()) category = "notatka";
+                if (category.length() > 40) category = category.substring(0, 40);
+                String key = category + "\\u0000" + body;
+                if (!known.add(key)) continue;
+
+                long createdAt = item.optLong("created_at", System.currentTimeMillis());
+                if (createdAt <= 0L || createdAt > System.currentTimeMillis() + 86_400_000L) {
+                    createdAt = System.currentTimeMillis();
+                }
+                ContentValues values = new ContentValues();
+                values.put("category", category);
+                values.put("body", body);
+                values.put("created_at", createdAt);
+
+                String encoded = item.optString("embedding_b64", "");
+                if (!encoded.isEmpty()) {
+                    try {
+                        byte[] vector = Base64.decode(encoded, Base64.DEFAULT);
+                        if (vector.length == 384 * 4 && isFiniteVector(vector)) {
+                            values.put("embedding", vector);
+                        }
+                    } catch (IllegalArgumentException ignored) {
+                        // Re-index this record later if the E5 model is available.
+                    }
+                }
+                if (db.insert("memories", null, values) != -1L) inserted++;
+            }
+            db.delete("memories",
+                    "_id NOT IN (SELECT _id FROM memories ORDER BY created_at DESC, _id DESC LIMIT "
+                            + MAX_RECORDS + ")", null);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        return inserted;
+    }
+
+    private static boolean isFiniteVector(byte[] raw) {
+        if (raw == null || raw.length != 384 * 4) return false;
+        ByteBuffer buffer = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN);
+        double normSquared = 0.0;
+        for (int i = 0; i < 384; i++) {
+            float value = buffer.getFloat();
+            if (!Float.isFinite(value)) return false;
+            normSquared += (double) value * value;
+        }
+        return Double.isFinite(normSquared) && normSquared > 1.0e-12;
     }
 
     public synchronized long addMemory(String body, String category) {

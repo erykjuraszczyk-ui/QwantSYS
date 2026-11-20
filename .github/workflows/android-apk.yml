@@ -1,4 +1,4 @@
-name: QwantSYS Launcher 1.0.0 APK
+name: QwantSYS Launcher 1.1.0 APK
 
 on:
   push:
@@ -70,6 +70,11 @@ jobs:
           sha256sum build/native/jni/libqwant_llama_jni.so
 
       - name: Compile, package and sign APK
+        env:
+          QWANT_RELEASE_KEYSTORE_BASE64: ${{ secrets.QWANT_RELEASE_KEYSTORE_BASE64 }}
+          QWANT_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.QWANT_RELEASE_KEYSTORE_PASSWORD }}
+          QWANT_RELEASE_KEY_ALIAS: ${{ secrets.QWANT_RELEASE_KEY_ALIAS }}
+          QWANT_RELEASE_KEY_PASSWORD: ${{ secrets.QWANT_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           SDK_BUILD="$ANDROID_HOME/build-tools/35.0.0"
@@ -90,8 +95,8 @@ jobs:
             --java build/generated \
             --min-sdk-version 26 \
             --target-sdk-version 33 \
-            --version-code 10 \
-            --version-name 1.0.0 \
+            --version-code 11 \
+            --version-name 1.1.0 \
             -o build/app-unsigned.apk
 
           mapfile -t JAVA_FILES < <(find qwant/launcher/src/main/java build/generated -name '*.java' -type f | sort)
@@ -107,30 +112,48 @@ jobs:
           (cd build/apk-native && zip -qr ../app-with-dex.apk lib)
           "$SDK_BUILD/zipalign" -f -p 4 build/app-with-dex.apk build/app-aligned.apk
 
-          keytool -genkeypair -v \
+          if [ -n "${QWANT_RELEASE_KEYSTORE_BASE64:-}" ] \
+            && [ -n "${QWANT_RELEASE_KEYSTORE_PASSWORD:-}" ] \
+            && [ -n "${QWANT_RELEASE_KEY_ALIAS:-}" ] \
+            && [ -n "${QWANT_RELEASE_KEY_PASSWORD:-}" ]; then
+            echo "$QWANT_RELEASE_KEYSTORE_BASE64" | base64 --decode > build/qwant-release.keystore
+            KEYSTORE="build/qwant-release.keystore"
+            STORE_PASS="env:QWANT_RELEASE_KEYSTORE_PASSWORD"
+            KEY_ALIAS="$QWANT_RELEASE_KEY_ALIAS"
+            KEY_PASS="env:QWANT_RELEASE_KEY_PASSWORD"
+          else
+            echo "WARNING: release signing secrets not configured; using temporary debug key."
+            keytool -genkeypair -v \
             -keystore build/qwant-debug.keystore \
             -storepass android \
             -alias androiddebugkey \
             -keypass android \
             -keyalg RSA -keysize 2048 -validity 3650 \
             -dname "CN=Qwant Debug,O=QwantSYS,C=PL"
+            KEYSTORE="build/qwant-debug.keystore"
+            STORE_PASS="pass:android"
+            KEY_ALIAS="androiddebugkey"
+            KEY_PASS="pass:android"
+          fi
 
           "$SDK_BUILD/apksigner" sign \
-            --ks build/qwant-debug.keystore \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --ks-key-alias androiddebugkey \
-            --out out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk \
+            --ks "$KEYSTORE" \
+            --ks-pass "$STORE_PASS" \
+            --key-pass "$KEY_PASS" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --out out/QwantSYS-REDMAGIC7-Launcher-1.1.0.apk \
             build/app-aligned.apk
 
-          "$SDK_BUILD/apksigner" verify --verbose --print-certs out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
-          file out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
-          sha256sum out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
+          "$SDK_BUILD/apksigner" verify --verbose --print-certs out/QwantSYS-REDMAGIC7-Launcher-1.1.0.apk
+          "$SDK_BUILD/zipalign" -c -v 4 out/QwantSYS-REDMAGIC7-Launcher-1.1.0.apk
+          "$SDK_BUILD/aapt" dump badging out/QwantSYS-REDMAGIC7-Launcher-1.1.0.apk | grep -F "package: name='com.qwant.launcher' versionCode='11' versionName='1.1.0'"
+          file out/QwantSYS-REDMAGIC7-Launcher-1.1.0.apk
+          sha256sum out/QwantSYS-REDMAGIC7-Launcher-1.1.0.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QwantSYS-REDMAGIC7-Launcher-1.0.0
-          path: out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
+          name: QwantSYS-REDMAGIC7-Launcher-1.1.0
+          path: out/QwantSYS-REDMAGIC7-Launcher-1.1.0.apk
           if-no-files-found: error
           retention-days: 30

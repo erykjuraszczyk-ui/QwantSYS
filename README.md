@@ -124,3 +124,28 @@ The Android Gradle configuration and the manual APK workflow both use versionCod
 GitHub Actions verifies compilation, JNI packaging and APK signing. It cannot verify the vendor-specific Home role flow or real model inference on a physical REDMAGIC 7. Those checks remain on-device acceptance tests.
 
 See [QwantOS System Diagnostics 1.0.0](docs/QWANTOS_SYSTEM_DIAGNOSTICS_1.0.0.md).
+
+
+## QwantOS Extended Final Candidate — 1.1.0
+
+This release adds a user-initiated JSON backup and restore flow for local Cortana memory, chat history and Qwant launcher settings.
+
+- Backup is saved through Android's document picker; the application does not silently write to shared storage.
+- The backup envelope contains a SHA-256 checksum to detect accidental corruption; it is not a digital signature. Restore verifies the checksum and schema before importing data.
+- Memory records are merged by category and body to avoid duplicates, with a hard cap of 500 records.
+- Existing and imported chat history is merged, duplicate entries are removed, and only the newest 40 conversations are retained.
+- Qwant launcher settings (accent, compact layout, 24-hour clock and favorites) are included.
+- Downloaded GGUF model files are intentionally excluded; they can be downloaded again from Cortana's local-model panel.
+- Backups are user-controlled files and may contain private notes and conversation text. Store them in a protected location.
+
+### Build and signing
+
+Version metadata is `versionCode 11` / `versionName 1.1.0`. The workflow verifies APK signature, zip alignment and package/version metadata.
+
+For a persistent release signature, configure these GitHub Actions repository secrets:
+`QWANT_RELEASE_KEYSTORE_BASE64`, `QWANT_RELEASE_KEYSTORE_PASSWORD`, `QWANT_RELEASE_KEY_ALIAS`, and `QWANT_RELEASE_KEY_PASSWORD`.
+Without all four secrets, CI intentionally falls back to a temporary debug keystore. Such an APK is a test build and cannot be assumed to update an APK signed with another key. Do not delete the installed app until your data is backed up.
+
+### Platform boundary
+
+QwantOS remains an unprivileged Android Home launcher. It does not replace the vendor ROM, kernel, lock screen, radio stack, system notification shade or device firmware.

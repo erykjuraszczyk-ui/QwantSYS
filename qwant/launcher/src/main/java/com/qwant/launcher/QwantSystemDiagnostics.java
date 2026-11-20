@@ -42,7 +42,7 @@ public final class QwantSystemDiagnostics {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle("QwantOS Diagnostics • 1.0.0")
+                .setTitle("QwantOS Diagnostics • 1.1.0")
                 .setView(scroll)
                 .setNeutralButton("Kopiuj raport", (d, which) -> {
                     ClipboardManager clipboard =
@@ -67,7 +67,7 @@ public final class QwantSystemDiagnostics {
 
     private static String createReport(Activity activity) {
         StringBuilder out = new StringBuilder(1400);
-        out.append("QWANTOS SYSTEM DIAGNOSTICS 1.0.0\n");
+        out.append("QWANTOS SYSTEM DIAGNOSTICS 1.1.0\n");
         out.append("Raport lokalny • bez automatycznej wysyłki\n\n");
         out.append("[URZĄDZENIE]\n");
         out.append("Model: ").append(Build.MODEL).append("\n");
