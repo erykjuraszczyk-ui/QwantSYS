@@ -99,7 +99,7 @@ public final class CortanaAssistantActivity extends Activity {
         titleBlock.setOrientation(LinearLayout.VERTICAL);
         TextView title = text("CORTANA", 21, WHITE, true);
         title.setLetterSpacing(0.12f);
-        TextView subtitle = text("QWANT LOCAL AI CORE  /  0.7.0", 9, accent, true);
+        TextView subtitle = text("QWANT MEMORY CORE  /  0.7.0", 9, accent, true);
         subtitle.setLetterSpacing(0.07f);
         titleBlock.addView(title);
         titleBlock.addView(subtitle);
@@ -329,7 +329,7 @@ public final class CortanaAssistantActivity extends Activity {
             if (note.isEmpty()) return "Podaj treść notatki po dwukropku. Przykład: zapamiętaj: projekt Qwant.";
             return saveNote(note)
                     ? "Zapisano notatkę w lokalnej pamięci Qwant."
-                    : "Pamięć jest pełna (" + MAX_NOTES + " notatek). Usuń część wpisów i spróbuj ponownie.";
+                    : "Nie udało się zapisać wpisu. Treść musi mieć od 1 do 4000 znaków, a pamięć aplikacji musi być dostępna.";
         }
 
         if (command.startsWith("szukaj pamięci:") || command.startsWith("szukaj pamieci:")) {
