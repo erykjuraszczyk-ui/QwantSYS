@@ -1,25 +1,23 @@
-# Qwant Launcher 0.2.0
+# Qwant Launcher 0.3.0
 
-Testowa nakładka Qwant dla REDMAGIC 7 / Android 13.
+Testowa nakładka Qwant dla REDMAGIC 7 (NX679J) / Android 13.
 
-## Nowości 0.2.0
+## Nowości 0.3.0
 
-- Personalizacja koloru akcentu: Cyan, Violet, Emerald, Amber, Pink.
-- Trwałe ustawienia układu kompaktowego i zegara 24-godzinnego.
-- Wyszukiwalna lista aplikacji zainstalowanych na urządzeniu.
-- Osobny Qwant Hardware Monitor z podsumowaniem CPU, RAM, baterii, temperatur, pamięci i czujników.
-- Szybkie skróty do Wi-Fi, Bluetooth, baterii i ustawień Androida.
-- Rozbudowany pulpit z zegarem, datą i automatycznym odświeżaniem statusu.
+- Dock ulubionych aplikacji: przypnij do czterech aplikacji, uruchamiaj je jednym dotknięciem i zmieniaj zestaw w dowolnej chwili.
+- Ikony i nazwy aplikacji w docku są pobierane z PackageManager; zapisane wybory są przechowywane lokalnie w SharedPreferences.
+- Qwant Control Center z kafelkami Internet, Wi-Fi, Bluetooth, Dźwięk, Ekran, Bateria, Ustawienia i Pulpit.
+- Kafelki uruchamiają udokumentowane panele Androida lub odpowiednie ekrany ustawień z bezpiecznym fallbackiem.
+- Zachowane funkcje 0.2.0: monitor sprzętu, przeszukiwalna szuflada aplikacji, personalizacja kolorów, zegar 24 h i układ kompaktowy.
 
-## Ograniczenia i bezpieczeństwo
+## Granice techniczne
 
-To aplikacja użytkownika pełniąca rolę launchera, a nie ROM ani uprzywilejowana aplikacja systemowa.
-Nie ma uprawnień root, nie zmienia częstotliwości CPU/GPU i nie zapisuje do sysfs.
-Odczyty temperatur i częstotliwości mogą być niedostępne w sandboxie Androida; w takim przypadku panel pokazuje brak danych lub stan termiczny zwracany przez publiczne API.
-NNAPI jest interfejsem platformy; wykrycie usług Qualcomm nie potwierdza bezpośredniego dostępu aplikacji do akceleratorów.
+Qwant Control Center jest własnym panelem skrótów aplikacji. Nie zastępuje systemowego panelu powiadomień ani Quick Settings i nie przełącza bezpośrednio chronionych przełączników systemowych. Przekazuje użytkownika do oficjalnych paneli Androida.
+
+To aplikacja użytkownika pełniąca rolę launchera, a nie ROM ani uprzywilejowana aplikacja systemowa. Nie ma uprawnień root, nie zapisuje do sysfs, nie zmienia częstotliwości CPU/GPU i nie wyłącza zabezpieczeń Androida. Odczyty temperatur i częstotliwości mogą być niedostępne w sandboxie.
 
 ## Budowanie
 
-Workflow używa narzędzi Android SDK: AAPT2, javac, D8, zipalign i apksigner.
-Artefakt: `QwantSYS-REDMAGIC7-Launcher-0.2.0.apk`.
-Aplikacja jest podpisana testowym kluczem debug, nie kluczem produkcyjnym.
+Workflow używa AAPT2, javac, D8, zipalign i apksigner.
+Artefakt: `QwantSYS-REDMAGIC7-Launcher-0.3.0.apk`.
+Aplikacja jest podpisywana tymczasowym kluczem debug CI; nowy build może wymagać odinstalowania poprzedniej wersji przed instalacją.

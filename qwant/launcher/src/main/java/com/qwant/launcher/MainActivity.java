@@ -33,6 +33,8 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ImageView;
+import android.widget.Toast;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -49,6 +51,7 @@ import java.util.Locale;
 
 public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(8, 13, 24);
+    private static final int MAX_FAVORITES = 4;
     private static final int PANEL = Color.rgb(17, 27, 45);
     private static final int PANEL_ALT = Color.rgb(20, 34, 54);
     private static final int LINE = Color.rgb(37, 57, 79);
@@ -142,7 +145,7 @@ public final class MainActivity extends Activity {
         brand.setPadding(dp(12), 0, 0, 0);
         TextView name = text("QWANT", 21, WHITE, true);
         name.setLetterSpacing(0.12f);
-        TextView version = text("SYSTEM INTERFACE  /  0.2.0", 9, MUTED, true);
+        TextView version = text("SYSTEM INTERFACE  /  0.3.0", 9, MUTED, true);
         version.setLetterSpacing(0.07f);
         brand.addView(name);
         brand.addView(version);
@@ -168,7 +171,10 @@ public final class MainActivity extends Activity {
         TextView subtitle = text(Build.MODEL + "  •  QwantSYS Foundation", 12, MUTED, false);
         subtitle.setPadding(0, dp(4), 0, 0);
         page.addView(subtitle);
-        space(page, compact ? 14 : 20);
+
+        section(page, "DOCK / ULUBIONE", "Szybki dostęp do maksymalnie czterech aplikacji");
+        page.addView(buildFavoritesDock(), fullWidth());
+        space(page, compact ? 8 : 12);
 
         LinearLayout status = cardContainer(PANEL_ALT, 17);
         TextView statusTitle = text("QWANT CORE  /  LOCAL SESSION", 10, accent, true);
@@ -205,14 +211,15 @@ public final class MainActivity extends Activity {
         rowThree.addView(metricCard("SYSTEM", "Android", "Wersja platformy", v -> deviceValue = v), weightParams());
         page.addView(rowThree);
 
-        section(page, "CENTRUM QWANT", "Aplikacje, diagnostyka i konfiguracja");
+        section(page, "CENTRUM QWANT", "Aplikacje, sterowanie, diagnostyka i konfiguracja");
         LinearLayout actionsA = metricRow();
+        actionsA.addView(actionCard("◈", "Panel Qwant", "Szybkie ustawienia", this::openControlCenter), weightParams());
         actionsA.addView(actionCard("▦", "Aplikacje", "Szukaj i uruchamiaj", this::openAppDrawer), weightParams());
-        actionsA.addView(actionCard("⌁", "Monitor", "Szczegóły sprzętu", this::openHardwareDashboard), weightParams());
         page.addView(actionsA);
         space(page, 8);
 
         LinearLayout actionsB = metricRow();
+        actionsB.addView(actionCard("⌁", "Monitor", "Szczegóły sprzętu", this::openHardwareDashboard), weightParams());
         actionsB.addView(actionCard("✧", "Wygląd", "Kolor i układ pulpitu", this::openCustomization), weightParams());
         actionsB.addView(actionCard("⚙", "Ustawienia", "Konfiguracja Androida", () -> openSettings(Settings.ACTION_SETTINGS)), weightParams());
         page.addView(actionsB);
@@ -487,6 +494,145 @@ public final class MainActivity extends Activity {
         return String.format(Locale.getDefault(), "%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0));
     }
 
+    private List<AppEntry> getLaunchableApps() {
+        Intent query = new Intent(Intent.ACTION_MAIN);
+        query.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> found = getPackageManager().queryIntentActivities(query, 0);
+        List<AppEntry> entries = new ArrayList<>();
+        for (ResolveInfo info : found) {
+            if (info.activityInfo == null || getPackageName().equals(info.activityInfo.packageName)) continue;
+            entries.add(new AppEntry(info, getPackageManager()));
+        }
+        entries.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.label, b.label));
+        return entries;
+    }
+
+    private List<String> getFavoriteComponents() {
+        String raw = preferences.getString("favorites", "");
+        List<String> result = new ArrayList<>();
+        if (raw == null || raw.trim().isEmpty()) return result;
+        for (String value : raw.split("\\\\|")) {
+            if (!value.trim().isEmpty() && result.size() < MAX_FAVORITES) result.add(value);
+        }
+        return result;
+    }
+
+    private LinearLayout buildFavoritesDock() {
+        LinearLayout dock = cardContainer(PANEL, 15);
+        List<String> selected = getFavoriteComponents();
+        List<AppEntry> installed = getLaunchableApps();
+        LinearLayout row = metricRow();
+
+        if (selected.isEmpty()) {
+            TextView hint = text("Dock jest pusty. Dodaj aplikacje, których używasz najczęściej.", 11, MUTED, false);
+            hint.setPadding(0, 0, 0, dp(10));
+            dock.addView(hint);
+            dock.addView(actionCard("＋", "Dodaj ulubione", "Wybierz do 4 aplikacji", this::openFavoritePicker), fullWidth());
+        } else {
+            int shown = 0;
+            for (String component : selected) {
+                AppEntry match = null;
+                for (AppEntry entry : installed) {
+                    ComponentName name = new ComponentName(entry.info.activityInfo.packageName, entry.info.activityInfo.name);
+                    if (component.equals(name.flattenToString())) { match = entry; break; }
+                }
+                if (match != null) {
+                    row.addView(favoriteTile(match), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                    shown++;
+                }
+            }
+            if (shown == 0) {
+                TextView hint = text("Zapisane aplikacje nie są już dostępne.", 11, MUTED, false);
+                dock.addView(hint);
+            } else {
+                dock.addView(row, fullWidth());
+            }
+        }
+
+        TextView edit = text("＋  Edytuj ulubione", 10, accent, true);
+        edit.setGravity(Gravity.CENTER);
+        edit.setPadding(0, dp(12), 0, dp(2));
+        edit.setOnClickListener(v -> openFavoritePicker());
+        edit.setClickable(true);
+        dock.addView(edit, fullWidth());
+        return dock;
+    }
+
+    private LinearLayout favoriteTile(AppEntry entry) {
+        LinearLayout tile = cardContainer(PANEL_ALT, 12);
+        tile.setGravity(Gravity.CENTER);
+        tile.setMinimumHeight(dp(82));
+        try {
+            ImageView icon = new ImageView(this);
+            icon.setImageDrawable(entry.info.loadIcon(getPackageManager()));
+            tile.addView(icon, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        } catch (RuntimeException ignored) { }
+        TextView label = text(entry.label, 9, WHITE, true);
+        label.setGravity(Gravity.CENTER);
+        label.setMaxLines(1);
+        label.setPadding(0, dp(6), 0, 0);
+        tile.addView(label, fullWidth());
+        tile.setClickable(true);
+        tile.setFocusable(true);
+        tile.setOnClickListener(v -> launchApp(entry));
+        tile.setOnLongClickListener(v -> { openFavoritePicker(); return true; });
+        return tile;
+    }
+
+    private void launchApp(AppEntry entry) {
+        try {
+            Intent launch = new Intent(Intent.ACTION_MAIN);
+            launch.addCategory(Intent.CATEGORY_LAUNCHER);
+            launch.setComponent(new ComponentName(entry.info.activityInfo.packageName, entry.info.activityInfo.name));
+            startActivity(launch);
+        } catch (RuntimeException ex) {
+            Toast.makeText(this, "Nie można uruchomić tej aplikacji.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openFavoritePicker() {
+        List<AppEntry> entries = getLaunchableApps();
+        if (entries.isEmpty()) {
+            Toast.makeText(this, "Brak aplikacji do przypięcia.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] labels = new String[entries.size()];
+        boolean[] checked = new boolean[entries.size()];
+        List<String> current = getFavoriteComponents();
+        for (int i = 0; i < entries.size(); i++) {
+            AppEntry entry = entries.get(i);
+            labels[i] = entry.label;
+            ComponentName name = new ComponentName(entry.info.activityInfo.packageName, entry.info.activityInfo.name);
+            checked[i] = current.contains(name.flattenToString());
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Ulubione • maks. " + MAX_FAVORITES)
+                .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> {
+                    checked[which] = isChecked;
+                    int count = 0;
+                    for (boolean value : checked) if (value) count++;
+                    if (count > MAX_FAVORITES) {
+                        checked[which] = false;
+                        ((AlertDialog) d).getListView().setItemChecked(which, false);
+                        Toast.makeText(this, "Możesz przypiąć maksymalnie cztery aplikacje.", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setPositiveButton("Zapisz", (d, which) -> {
+                    List<String> chosen = new ArrayList<>();
+                    for (int i = 0; i < entries.size(); i++) {
+                        if (!checked[i]) continue;
+                        AppEntry entry = entries.get(i);
+                        chosen.add(new ComponentName(entry.info.activityInfo.packageName, entry.info.activityInfo.name).flattenToString());
+                    }
+                    preferences.edit().putString("favorites", String.join("|", chosen)).apply();
+                    buildInterface();
+                })
+                .setNegativeButton("Anuluj", null)
+                .create();
+        dialog.show();
+    }
+
     private void openAppDrawer() {
         Intent query = new Intent(Intent.ACTION_MAIN);
         query.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -575,6 +721,64 @@ public final class MainActivity extends Activity {
         @Override public String toString() { return label; }
     }
 
+    private void addPanelRow(LinearLayout content, String iconA, String titleA, String hintA,
+                             String actionA, String fallbackA, String iconB, String titleB,
+                             String hintB, String actionB, String fallbackB) {
+        LinearLayout row = metricRow();
+        row.addView(actionCard(iconA, titleA, hintA, () -> openAndroidPanel(actionA, fallbackA)), weightParams());
+        row.addView(actionCard(iconB, titleB, hintB, () -> openAndroidPanel(actionB, fallbackB)), weightParams());
+        content.addView(row, fullWidth());
+        space(content, 8);
+    }
+
+    private void openControlCenter() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(14), dp(8), dp(14), dp(8));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content);
+
+        TextView note = text("Centrum skrótów Qwant. Każdy kafelek otwiera oficjalny panel lub ekran ustawień Androida; aplikacja nie zmienia ukrytych ustawień systemowych.", 11, MUTED, false);
+        note.setLineSpacing(dp(3), 1f);
+        note.setPadding(0, 0, 0, dp(12));
+        content.addView(note);
+
+        addPanelRow(content, "⌁", "Internet", "Sieć i łączność",
+                "android.settings.panel.action.INTERNET_CONNECTIVITY", Settings.ACTION_WIFI_SETTINGS,
+                "◉", "Wi-Fi", "Ustawienia sieci",
+                "android.settings.panel.action.WIFI", Settings.ACTION_WIFI_SETTINGS);
+        addPanelRow(content, "ᛒ", "Bluetooth", "Urządzenia bezprzewodowe",
+                Settings.ACTION_BLUETOOTH_SETTINGS, Settings.ACTION_SETTINGS,
+                "♫", "Dźwięk", "Głośność i tryby",
+                "android.settings.panel.action.VOLUME", Settings.ACTION_SOUND_SETTINGS);
+        addPanelRow(content, "☼", "Ekran", "Jasność i wyświetlanie",
+                Settings.ACTION_DISPLAY_SETTINGS, Settings.ACTION_SETTINGS,
+                "◌", "Bateria", "Zasilanie i oszczędzanie",
+                "android.settings.panel.action.BATTERY", Settings.ACTION_BATTERY_SAVER_SETTINGS);
+        addPanelRow(content, "⚙", "Ustawienia", "Pełna konfiguracja",
+                Settings.ACTION_SETTINGS, Settings.ACTION_SETTINGS,
+                "⌂", "Pulpit", "Domyślna aplikacja Home",
+                Settings.ACTION_HOME_SETTINGS, Settings.ACTION_SETTINGS);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Qwant Control Center")
+                .setView(scroll)
+                .setPositiveButton("Gotowe", null)
+                .show();
+    }
+
+    private void openAndroidPanel(String panelAction, String fallbackAction) {
+        if (Build.VERSION.SDK_INT >= 29) {
+            try {
+                startActivity(new Intent(panelAction));
+                return;
+            } catch (RuntimeException ignored) {
+                // Panel may be unavailable on a vendor Android build.
+            }
+        }
+        openSettings(fallbackAction);
+    }
+
     private void openHardwareDashboard() {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -617,7 +821,7 @@ public final class MainActivity extends Activity {
         addMonitorSection(content, "OGRANICZENIA", "Aplikacja nie ma uprawnień root ani systemowego DUMP. Część odczytów CPU i temperatur może być niedostępna w sandboxie Androida.");
 
         new AlertDialog.Builder(this)
-                .setTitle("Qwant Hardware Monitor  •  0.2.0")
+                .setTitle("Qwant Hardware Monitor  •  0.3.0")
                 .setView(scroll)
                 .setPositiveButton("Odśwież pulpit", (d, w) -> refreshMetrics())
                 .setNegativeButton("Zamknij", null)
