@@ -2,6 +2,7 @@ package com.qwant.launcher;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.role.RoleManager;
 import android.appwidget.AppWidgetManager;
 import android.app.AlertDialog;
 import android.content.ComponentName;
@@ -86,6 +87,7 @@ public final class MainActivity extends Activity {
     private TextView deviceValue;
     private TextView statusBody;
     private TextView detailValue;
+    private TextView shellStatusView;
 
     private final Runnable refreshTask = new Runnable() {
         @Override public void run() {
@@ -113,6 +115,7 @@ public final class MainActivity extends Activity {
         handler.removeCallbacks(refreshTask);
         handler.post(refreshTask);
         QwantGlanceWidget.updateAll(this);
+        refreshSystemShellStatus();
     }
 
     @Override protected void onPause() {
@@ -147,7 +150,7 @@ public final class MainActivity extends Activity {
         brand.setPadding(dp(12), 0, 0, 0);
         TextView name = text("QWANT", 21, WHITE, true);
         name.setLetterSpacing(0.12f);
-        TextView version = text("SYSTEM INTERFACE  /  0.8.0", 9, MUTED, true);
+        TextView version = text("QWANTOS SHELL  /  0.9.0", 9, MUTED, true);
         version.setLetterSpacing(0.07f);
         brand.addView(name);
         brand.addView(version);
@@ -170,7 +173,7 @@ public final class MainActivity extends Activity {
         TextView heading = text("Twój pulpit.", compact ? 27 : 30, WHITE, true);
         heading.setPadding(0, dp(4), 0, 0);
         page.addView(heading);
-        TextView subtitle = text(Build.MODEL + "  •  QwantSYS Foundation", 12, MUTED, false);
+        TextView subtitle = text(Build.MODEL + "  •  QwantOS Android Overlay", 12, MUTED, false);
         subtitle.setPadding(0, dp(4), 0, 0);
         page.addView(subtitle);
 
@@ -191,6 +194,20 @@ public final class MainActivity extends Activity {
         statusBody.setLineSpacing(dp(3), 1.0f);
         status.addView(statusBody);
         page.addView(status, fullWidth());
+
+        section(page, "QWANTOS / NAKŁADKA SYSTEMOWA", "Qwant jako ekran główny Androida");
+        LinearLayout shellPanel = cardContainer(PANEL, 17);
+        TextView shellTitle = text("QWANTOS HOME SHELL", 11, accent, true);
+        shellTitle.setLetterSpacing(0.10f);
+        shellPanel.addView(shellTitle);
+        shellStatusView = text("Sprawdzanie statusu domyślnego pulpitu…", 12, WHITE, false);
+        shellStatusView.setPadding(0, dp(7), 0, dp(10));
+        shellStatusView.setLineSpacing(dp(3), 1f);
+        shellPanel.addView(shellStatusView);
+        shellPanel.addView(actionCard("⌂", "Aktywuj QwantOS", "Ustaw Qwant jako domyślny ekran główny", this::activateQwantHome), fullWidth());
+        space(shellPanel, 7);
+        shellPanel.addView(actionCard("◈", "Centrum sterowania", "Skróty do oficjalnych paneli Androida", this::openControlCenter), fullWidth());
+        page.addView(shellPanel, fullWidth());
 
         section(page, "SZYBKIE SKRÓTY", "Ustawienia telefonu");
         LinearLayout quick = metricRow();
@@ -248,13 +265,13 @@ public final class MainActivity extends Activity {
         aiCard.addView(aiNote);
         page.addView(aiCard, fullWidth());
 
-        section(page, "INFORMACJE O URZĄDZENIU", "QwantSYS 0.8.0 • testowa nakładka Androida");
+        section(page, "INFORMACJE O URZĄDZENIU", "QwantOS 0.9.0 • testowa nakładka Androida");
         detailValue = text("Ładowanie danych urządzenia…", 11, MUTED, false);
         detailValue.setPadding(dp(14), dp(12), dp(14), dp(12));
         detailValue.setBackground(round(PANEL, LINE, 15));
         page.addView(detailValue, fullWidth());
 
-        TextView footer = text("QWANT  •  ANDROID OVERLAY  •  NX679J", 9, MUTED, true);
+        TextView footer = text("QWANTOS  •  ANDROID HOME SHELL  •  NX679J", 9, MUTED, true);
         footer.setGravity(Gravity.CENTER);
         footer.setLetterSpacing(0.08f);
         footer.setPadding(0, dp(23), 0, dp(5));
@@ -830,7 +847,7 @@ public final class MainActivity extends Activity {
         addMonitorSection(content, "OGRANICZENIA", "Aplikacja nie ma uprawnień root ani systemowego DUMP. Część odczytów CPU i temperatur może być niedostępna w sandboxie Androida.");
 
         new AlertDialog.Builder(this)
-                .setTitle("Qwant Hardware Monitor  •  0.8.0")
+                .setTitle("QwantOS Hardware Monitor  •  0.9.0")
                 .setView(scroll)
                 .setPositiveButton("Odśwież pulpit", (d, w) -> refreshMetrics())
                 .setNegativeButton("Zamknij", null)
@@ -943,6 +960,66 @@ public final class MainActivity extends Activity {
             startActivity(new Intent(this, CortanaAssistantActivity.class));
         } catch (RuntimeException ex) {
             Toast.makeText(this, "Nie można uruchomić Cortana AI.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+
+    private boolean isQwantDefaultHome() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            RoleManager roles = (RoleManager) getSystemService(ROLE_SERVICE);
+            if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                return roles.isRoleHeld(RoleManager.ROLE_HOME);
+            }
+        }
+        Intent home = new Intent(Intent.ACTION_MAIN);
+        home.addCategory(Intent.CATEGORY_HOME);
+        android.content.pm.ResolveInfo resolved = getPackageManager().resolveActivity(
+                home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+        return resolved != null && resolved.activityInfo != null
+                && getPackageName().equals(resolved.activityInfo.packageName);
+    }
+
+    private void refreshSystemShellStatus() {
+        if (shellStatusView == null) return;
+        if (isQwantDefaultHome()) {
+            shellStatusView.setText("AKTYWNY • QwantOS jest domyślnym pulpitem. Android nadal zarządza ekranem blokady, powiadomieniami, uprawnieniami i sprzętem.");
+            shellStatusView.setTextColor(Color.rgb(116, 231, 174));
+        } else {
+            shellStatusView.setText("NIEAKTYWNY • Qwant działa jako aplikacja. Wybierz Aktywuj QwantOS, aby ustawić go jako ekran główny. Zmianę możesz cofnąć w ustawieniach Androida.");
+            shellStatusView.setTextColor(WHITE);
+        }
+    }
+
+    private void activateQwantHome() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            RoleManager roles = (RoleManager) getSystemService(ROLE_SERVICE);
+            if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                if (roles.isRoleHeld(RoleManager.ROLE_HOME)) {
+                    Toast.makeText(this, "QwantOS jest już domyślnym pulpitem.", Toast.LENGTH_SHORT).show();
+                    refreshSystemShellStatus();
+                    return;
+                }
+                try {
+                    startActivityForResult(roles.createRequestRoleIntent(RoleManager.ROLE_HOME), 901);
+                    return;
+                } catch (RuntimeException ignored) {
+                    // Fall back to the Android Home settings page.
+                }
+            }
+        }
+        openHomeSettings();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 901) {
+            refreshSystemShellStatus();
+            if (isQwantDefaultHome()) {
+                Toast.makeText(this, "QwantOS aktywny jako ekran główny.", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "Nie zmieniono domyślnego pulpitu.", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 

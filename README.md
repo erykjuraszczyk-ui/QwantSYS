@@ -77,3 +77,28 @@ See [Memory Core 0.7.0 technical notes](docs/MEMORY_CORE_0.7.0.md).
 - All inference and storage remain on the phone after model download. No cloud inference endpoint is used by this feature.
 
 See [Semantic Memory Core 0.8.0 technical notes](docs/SEMANTIC_MEMORY_0.8.0.md).
+
+
+## QwantOS Android Home Overlay — 0.9.0
+
+0.9.0 advances the Android application prototype into a selectable QwantOS Home Shell. It is an Android launcher overlay, not a replacement Android ROM, boot image, system partition or firmware.
+
+- The manifest labels the application as QwantOS and declares the HOME intent filter.
+- The home screen offers an explicit activation action using Android's `RoleManager.ROLE_HOME` request on Android 10+; older supported versions fall back to Android Home settings.
+- The launcher checks whether QwantOS currently holds the HOME role and displays the active/inactive state.
+- Existing app drawer, favorites dock, device monitor, Qwant Control Center and Cortana interface are retained.
+- Control Center opens supported Android Settings Panels or official Settings screens. It does not write protected system settings or impersonate privileged Quick Settings.
+- Android continues to own lock screen, notifications, permission prompts, telephony, radio, verified boot and hardware drivers.
+- No root, bootloader unlock, accessibility service, notification listener, overlay permission or firmware flashing is required.
+
+### Activate on REDMAGIC 7
+
+1. Install the QwantOS 0.9.0 APK.
+2. Open QwantOS.
+3. Select **Aktywuj QwantOS**.
+4. Confirm QwantOS in the Android Home role chooser.
+5. Press Home to open the QwantOS launcher. The system status card confirms whether QwantOS is the default Home app.
+
+To switch back, open Android Settings → Apps → Default apps → Home app and select the REDMAGIC launcher.
+
+See [QwantOS Android Home Overlay 0.9.0 technical design](docs/QWANTOS_ANDROID_OVERLAY_0.9.0.md).
