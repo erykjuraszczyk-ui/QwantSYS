@@ -2,6 +2,7 @@ package com.qwant.launcher;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.appwidget.AppWidgetManager;
 import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -111,6 +112,7 @@ public final class MainActivity extends Activity {
         super.onResume();
         handler.removeCallbacks(refreshTask);
         handler.post(refreshTask);
+        QwantGlanceWidget.updateAll(this);
     }
 
     @Override protected void onPause() {
@@ -145,7 +147,7 @@ public final class MainActivity extends Activity {
         brand.setPadding(dp(12), 0, 0, 0);
         TextView name = text("QWANT", 21, WHITE, true);
         name.setLetterSpacing(0.12f);
-        TextView version = text("SYSTEM INTERFACE  /  0.3.0", 9, MUTED, true);
+        TextView version = text("SYSTEM INTERFACE  /  0.4.0", 9, MUTED, true);
         version.setLetterSpacing(0.07f);
         brand.addView(name);
         brand.addView(version);
@@ -174,6 +176,10 @@ public final class MainActivity extends Activity {
 
         section(page, "DOCK / ULUBIONE", "Szybki dostęp do maksymalnie czterech aplikacji");
         page.addView(buildFavoritesDock(), fullWidth());
+        space(page, compact ? 8 : 12);
+
+        section(page, "QWANT GLANCE", "Podgląd urządzenia i bezpieczeństwo ekranu");
+        page.addView(actionCard("◉", "Glance", "Zegar, bateria i informacje o blokadzie", this::openGlance), fullWidth());
         space(page, compact ? 8 : 12);
 
         LinearLayout status = cardContainer(PANEL_ALT, 17);
@@ -239,7 +245,7 @@ public final class MainActivity extends Activity {
         aiCard.addView(aiNote);
         page.addView(aiCard, fullWidth());
 
-        section(page, "INFORMACJE O URZĄDZENIU", "QwantSYS 0.2.0 • testowa nakładka Androida");
+        section(page, "INFORMACJE O URZĄDZENIU", "QwantSYS 0.4.0 • testowa nakładka Androida");
         detailValue = text("Ładowanie danych urządzenia…", 11, MUTED, false);
         detailValue.setPadding(dp(14), dp(12), dp(14), dp(12));
         detailValue.setBackground(round(PANEL, LINE, 15));
@@ -821,7 +827,7 @@ public final class MainActivity extends Activity {
         addMonitorSection(content, "OGRANICZENIA", "Aplikacja nie ma uprawnień root ani systemowego DUMP. Część odczytów CPU i temperatur może być niedostępna w sandboxie Androida.");
 
         new AlertDialog.Builder(this)
-                .setTitle("Qwant Hardware Monitor  •  0.3.0")
+                .setTitle("Qwant Hardware Monitor  •  0.4.0")
                 .setView(scroll)
                 .setPositiveButton("Odśwież pulpit", (d, w) -> refreshMetrics())
                 .setNegativeButton("Zamknij", null)
@@ -847,6 +853,7 @@ public final class MainActivity extends Activity {
                 .setSingleChoiceItems(ACCENT_NAMES, selected, (d, which) -> {
                     accent = ACCENTS[which];
                     preferences.edit().putInt("accent", accent).apply();
+                    QwantGlanceWidget.updateAll(this);
                     d.dismiss();
                     openLayoutOptions();
                 })
@@ -870,6 +877,7 @@ public final class MainActivity extends Activity {
                             .putBoolean("compact", compact)
                             .putBoolean("clock24", clock24)
                             .apply();
+                    QwantGlanceWidget.updateAll(this);
                     buildInterface();
                 })
                 .setNegativeButton("Anuluj", null)
@@ -884,6 +892,47 @@ public final class MainActivity extends Activity {
             try { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
             catch (RuntimeException ignored) { }
         }
+    }
+
+    private void openGlance() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(12), dp(20), dp(12));
+        panel.setBackground(round(PANEL, LINE, 18));
+
+        TextView label = text("QWANT / GLANCE", 10, accent, true);
+        label.setLetterSpacing(0.12f);
+        TextView time = text(new SimpleDateFormat(clock24 ? "HH:mm" : "h:mm a", Locale.getDefault()).format(new Date()),
+                38, WHITE, true);
+        TextView date = text(new SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(new Date()),
+                12, MUTED, false);
+
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        String batteryText = "Bateria: brak danych";
+        if (battery != null) {
+            int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+            if (level >= 0 && scale > 0) batteryText = "Bateria: " + Math.round(level * 100f / scale) + "%";
+        }
+        TextView batteryView = text(batteryText, 13, accent, true);
+        TextView boundary = text(
+                "To jest podgląd w aplikacji, nie ekran blokady. Zabezpieczony ekran blokady nadal obsługuje Android / REDMAGIC OS.",
+                11, MUTED, false);
+        boundary.setPadding(0, dp(12), 0, 0);
+        boundary.setLineSpacing(dp(3), 1f);
+
+        panel.addView(label);
+        panel.addView(time);
+        panel.addView(date);
+        panel.addView(batteryView);
+        panel.addView(boundary);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Qwant Glance")
+                .setView(panel)
+                .setPositiveButton("Ustawienia zabezpieczeń", (d, w) -> openSettings(Settings.ACTION_SECURITY_SETTINGS))
+                .setNegativeButton("Zamknij", null)
+                .show();
     }
 
     private void openHomeSettings() {
