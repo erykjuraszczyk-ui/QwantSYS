@@ -44,3 +44,20 @@ The initial foundation is being prepared on `qwantSYS-0.1.0-foundation`. The `ma
 AOSP source code alone is not sufficient to make a phone ROM. A working port also requires device-specific configuration, compatible kernel and hardware interfaces, firmware/vendor components, correct partition definitions and a tested recovery path. These items must be sourced and validated for the exact device.
 
 See [the device bring-up checklist](docs/DEVICE_BRINGUP_NX679J.md) before attempting any low-level operation.
+
+
+## Qwant Launcher prototype — 0.7.0
+
+The launcher is an Android application prototype for REDMAGIC 7 (arm64-v8a), not a replacement ROM and not a system partition image. Build output is produced by GitHub Actions.
+
+### Memory Core 0.7.0
+
+- Persistent memory records are stored in the app-private SQLite database.
+- Existing 0.6.0 notes are migrated once from SharedPreferences.
+- Entries can be added, searched, viewed and individually deleted from the Cortana memory panel.
+- The command `zapamiętaj: treść` saves an explicit memory; `szukaj pamięci: fraza` searches it.
+- The local model receives up to five text-matched memory records relevant to the latest user message.
+- Search is lexical/ranked text retrieval. It is not vector search, embeddings or semantic similarity.
+- All records remain on the device in the app's private storage. Clearing app data or uninstalling the app deletes them.
+
+See [Memory Core 0.7.0 technical notes](docs/MEMORY_CORE_0.7.0.md).
