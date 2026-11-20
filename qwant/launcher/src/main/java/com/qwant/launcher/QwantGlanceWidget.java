@@ -45,7 +45,9 @@ public final class QwantGlanceWidget extends AppWidgetProvider {
                 new SimpleDateFormat("EEE, d MMM", Locale.getDefault()).format(new Date()));
         views.setTextColor(R.id.widget_caption, accent);
         views.setTextColor(R.id.widget_battery, accent);
-        views.setInt(R.id.widget_root, "setBackgroundColor", Color.rgb(17, 27, 45));
+        String clockFormat = clock24 ? "HH:mm" : "h:mm a";
+        views.setCharSequence(R.id.widget_clock, "setFormat24Hour", clockFormat);
+        views.setCharSequence(R.id.widget_clock, "setFormat12Hour", clockFormat);
 
         Intent battery = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         String batteryLabel = "BATERIA  —";
