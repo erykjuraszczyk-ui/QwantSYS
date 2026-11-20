@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.qwant.launcher">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -14,7 +16,8 @@
         android:label="Qwant Launcher"
         android:supportsRtl="true"
         android:theme="@style/QwantTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:extractNativeLibs="true">
 
         <activity
             android:name=".CortanaAssistantActivity"

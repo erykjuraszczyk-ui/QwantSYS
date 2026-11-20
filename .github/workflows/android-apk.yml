@@ -36,7 +36,38 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Build llama.cpp JNI for Android arm64-v8a
+        run: |
+          set -euo pipefail
+          LLAMA_CPP_SHA="4c4a0f0a4246bc36a3724d12238d5624714dcb2f"
+          git init llama.cpp
+          git -C llama.cpp remote add origin https://github.com/ggml-org/llama.cpp.git
+          git -C llama.cpp fetch --depth=1 origin "$LLAMA_CPP_SHA"
+          git -C llama.cpp checkout --detach FETCH_HEAD
+
+          ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          CMAKE="$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+          test -d "$ANDROID_NDK"
+          test -x "$CMAKE"
+
+          "$CMAKE" -S qwant/launcher/src/main/cpp -B build/native \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DLLAMA_CPP_SOURCE_DIR="$GITHUB_WORKSPACE/llama.cpp" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DGGML_CPU_KLEIDIAI=ON \
+            -DLLAMA_OPENSSL=OFF
+          "$CMAKE" --build build/native --target qwant_llama_jni --parallel 2
+          test -s build/native/jni/libqwant_llama_jni.so
+          file build/native/jni/libqwant_llama_jni.so
+          sha256sum build/native/jni/libqwant_llama_jni.so
 
       - name: Compile, package and sign APK
         run: |
@@ -59,8 +90,8 @@ jobs:
             --java build/generated \
             --min-sdk-version 26 \
             --target-sdk-version 33 \
-            --version-code 5 \
-            --version-name 0.5.0 \
+            --version-code 6 \
+            --version-name 0.6.0 \
             -o build/app-unsigned.apk
 
           mapfile -t JAVA_FILES < <(find qwant/launcher/src/main/java build/generated -name '*.java' -type f | sort)
@@ -71,6 +102,9 @@ jobs:
 
           cp build/app-unsigned.apk build/app-with-dex.apk
           (cd build/dex && zip -q -j ../app-with-dex.apk classes.dex)
+          mkdir -p build/apk-native/lib/arm64-v8a
+          cp build/native/jni/libqwant_llama_jni.so build/apk-native/lib/arm64-v8a/
+          (cd build/apk-native && zip -qr ../app-with-dex.apk lib)
           "$SDK_BUILD/zipalign" -f -p 4 build/app-with-dex.apk build/app-aligned.apk
 
           keytool -genkeypair -v \
@@ -86,10 +120,10 @@ jobs:
             --ks-pass pass:android \
             --key-pass pass:android \
             --ks-key-alias androiddebugkey \
-            --out out/QwantSYS-REDMAGIC7-Launcher-0.5.0.apk \
+            --out out/QwantSYS-REDMAGIC7-Launcher-0.6.0.apk \
             build/app-aligned.apk
 
-          "$SDK_BUILD/apksigner" verify --verbose --print-certs out/QwantSYS-REDMAGIC7-Launcher-0.5.0.apk
+          "$SDK_BUILD/apksigner" verify --verbose --print-certs out/QwantSYS-REDMAGIC7-Launcher-0.6.0.apk
           file out/QwantSYS-REDMAGIC7-Launcher-0.5.0.apk
           sha256sum out/QwantSYS-REDMAGIC7-Launcher-0.5.0.apk
 
