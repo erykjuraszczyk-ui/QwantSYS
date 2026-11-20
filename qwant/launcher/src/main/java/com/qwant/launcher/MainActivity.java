@@ -494,7 +494,7 @@ public final class MainActivity extends Activity {
         List<AppEntry> entries = new ArrayList<>();
         for (ResolveInfo info : found) {
             if (info.activityInfo == null || getPackageName().equals(info.activityInfo.packageName)) continue;
-            entries.add(new AppEntry(info));
+            entries.add(new AppEntry(info, getPackageManager()));
         }
         entries.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.label, b.label));
 
@@ -568,10 +568,9 @@ public final class MainActivity extends Activity {
     private static final class AppEntry {
         final ResolveInfo info;
         final String label;
-        AppEntry(ResolveInfo info) {
+        AppEntry(ResolveInfo info, android.content.pm.PackageManager packageManager) {
             this.info = info;
-            this.label = String.valueOf(info.loadLabel(info.activityInfo.applicationInfo == null
-                    ? null : null));
+            this.label = String.valueOf(info.loadLabel(packageManager));
         }
         @Override public String toString() { return label; }
     }
@@ -597,7 +596,7 @@ public final class MainActivity extends Activity {
             int temp = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
             int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
             addMonitorSection(content, "BATERIA",
-                    "Poziom: " + (lvl >= 0 ? Math.round(lvl * 100f / scale) + "%" : "brak danych")
+                    "Poziom: " + (lvl >= 0 && scale > 0 ? Math.round(lvl * 100f / scale) + "%" : "brak danych")
                     + "\nTemperatura: " + (temp > 0 ? String.format(Locale.getDefault(), "%.1f°C", temp / 10f) : "brak danych")
                     + "\nŁadowanie: " + (status == BatteryManager.BATTERY_STATUS_CHARGING ? "tak" : "nie / nieznane"));
         }
