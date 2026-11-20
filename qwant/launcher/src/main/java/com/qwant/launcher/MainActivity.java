@@ -511,7 +511,7 @@ public final class MainActivity extends Activity {
         String raw = preferences.getString("favorites", "");
         List<String> result = new ArrayList<>();
         if (raw == null || raw.trim().isEmpty()) return result;
-        for (String value : raw.split("\\\\|")) {
+        for (String value : raw.split("\\|")) {
             if (!value.trim().isEmpty() && result.size() < MAX_FAVORITES) result.add(value);
         }
         return result;
