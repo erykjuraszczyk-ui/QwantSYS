@@ -1,26 +1,25 @@
-# Qwant Launcher 0.1.0
+# Qwant Launcher 0.2.0
 
-Pierwsza testowa nakładka Qwant dla REDMAGIC 7 / Android 13.
+Testowa nakładka Qwant dla REDMAGIC 7 / Android 13.
 
-## Funkcje
+## Nowości 0.2.0
 
-- Ekran główny Androida (HOME launcher) oraz ikona aplikacji.
-- Panel CPU, pamięci RAM, baterii, stanu termicznego i wolnej przestrzeni.
-- Odświeżanie panelu co 4 sekundy.
-- Lista aplikacji możliwych do uruchomienia.
-- Skróty do Ustawień, ustawień wyświetlacza i wyboru domyślnego launchera.
-- Informacje o wersji Androida, ABI i sensorach dostępnych przez publiczne API.
+- Personalizacja koloru akcentu: Cyan, Violet, Emerald, Amber, Pink.
+- Trwałe ustawienia układu kompaktowego i zegara 24-godzinnego.
+- Wyszukiwalna lista aplikacji zainstalowanych na urządzeniu.
+- Osobny Qwant Hardware Monitor z podsumowaniem CPU, RAM, baterii, temperatur, pamięci i czujników.
+- Szybkie skróty do Wi-Fi, Bluetooth, baterii i ustawień Androida.
+- Rozbudowany pulpit z zegarem, datą i automatycznym odświeżaniem statusu.
 
-## Ograniczenia
+## Ograniczenia i bezpieczeństwo
 
-To aplikacja użytkownika, a nie ROM ani uprzywilejowana aplikacja systemowa.
+To aplikacja użytkownika pełniąca rolę launchera, a nie ROM ani uprzywilejowana aplikacja systemowa.
 Nie ma uprawnień root, nie zmienia częstotliwości CPU/GPU i nie zapisuje do sysfs.
-Dostępność odczytów sysfs zależy od polityki Androida; brak dostępu jest wyświetlany jako brak danych.
-NNAPI jest pokazywane jako funkcja platformy, a nie jako potwierdzenie dostępu do każdego akceleratora Qualcomm.
+Odczyty temperatur i częstotliwości mogą być niedostępne w sandboxie Androida; w takim przypadku panel pokazuje brak danych lub stan termiczny zwracany przez publiczne API.
+NNAPI jest interfejsem platformy; wykrycie usług Qualcomm nie potwierdza bezpośredniego dostępu aplikacji do akceleratorów.
 
-## Budowanie APK
+## Budowanie
 
-CI używa narzędzi Android SDK: AAPT2, javac, D8, zipalign i apksigner.
-Artefakt instalacyjny: `QwantSYS-REDMAGIC7-Launcher-0.1.0.apk`.
-
-Aplikacja jest podpisana testowym kluczem debug. Nie jest to klucz produkcyjny ani wydanie Google Play.
+Workflow używa narzędzi Android SDK: AAPT2, javac, D8, zipalign i apksigner.
+Artefakt: `QwantSYS-REDMAGIC7-Launcher-0.2.0.apk`.
+Aplikacja jest podpisana testowym kluczem debug, nie kluczem produkcyjnym.

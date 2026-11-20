@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -18,23 +19,31 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
+import android.os.StatFs;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.app.usage.StorageStatsManager;
-import android.os.StatFs;
-import android.hardware.Sensor;
-import android.hardware.SensorManager;
 
-import java.io.File;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -43,48 +52,65 @@ public final class MainActivity extends Activity {
     private static final int PANEL = Color.rgb(17, 27, 45);
     private static final int PANEL_ALT = Color.rgb(20, 34, 54);
     private static final int LINE = Color.rgb(37, 57, 79);
-    private static final int CYAN = Color.rgb(79, 220, 235);
     private static final int WHITE = Color.rgb(239, 246, 255);
     private static final int MUTED = Color.rgb(148, 166, 190);
+    private static final int[] ACCENTS = {
+            Color.rgb(79, 220, 235),
+            Color.rgb(166, 130, 255),
+            Color.rgb(83, 220, 157),
+            Color.rgb(255, 183, 77),
+            Color.rgb(255, 115, 145)
+    };
+    private static final String[] ACCENT_NAMES = {
+            "Quantum Cyan", "Nebula Violet", "Emerald", "Solar Amber", "Pulse Pink"
+    };
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private SharedPreferences preferences;
+    private int accent = ACCENTS[0];
+    private boolean compact = false;
+    private boolean clock24 = true;
+
     private TextView clockView;
+    private TextView dateView;
     private TextView cpuValue;
     private TextView ramValue;
     private TextView batteryValue;
+    private TextView batteryHint;
     private TextView thermalValue;
     private TextView storageValue;
     private TextView deviceValue;
-    private TextView aiValue;
+    private TextView statusBody;
     private TextView detailValue;
 
     private final Runnable refreshTask = new Runnable() {
-        @Override
-        public void run() {
+        @Override public void run() {
             refreshMetrics();
             handler.postDelayed(this, 4000L);
         }
     };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        preferences = getSharedPreferences("qwant_launcher", MODE_PRIVATE);
+        accent = preferences.getInt("accent", ACCENTS[0]);
+        compact = preferences.getBoolean("compact", false);
+        clock24 = preferences.getBoolean("clock24", true);
+
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(0);
         buildInterface();
-        refreshMetrics();
     }
 
-    @Override
-    protected void onResume() {
+    @Override protected void onResume() {
         super.onResume();
         handler.removeCallbacks(refreshTask);
         handler.post(refreshTask);
     }
 
-    @Override
-    protected void onPause() {
+    @Override protected void onPause() {
         handler.removeCallbacks(refreshTask);
         super.onPause();
     }
@@ -96,161 +122,176 @@ public final class MainActivity extends Activity {
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(20), dp(18), dp(20), dp(28));
+        int outer = compact ? 14 : 20;
+        page.setPadding(dp(outer), dp(compact ? 12 : 18), dp(outer), dp(26));
         scroll.addView(page, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setOrientation(LinearLayout.HORIZONTAL);
 
-        TextView logo = text("Q", 25, CYAN, true);
+        TextView logo = text("Q", 25, accent, true);
         logo.setGravity(Gravity.CENTER);
-        logo.setBackground(round(PANEL_ALT, CYAN, 18));
-        top.addView(logo, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        logo.setBackground(round(PANEL_ALT, accent, 18));
+        logo.setOnLongClickListener(v -> { openCustomization(); return true; });
+        top.addView(logo, new LinearLayout.LayoutParams(dp(52), dp(52)));
 
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.VERTICAL);
-        brand.setPadding(dp(13), 0, 0, 0);
-        TextView name = text("QWANT", 22, WHITE, true);
+        brand.setPadding(dp(12), 0, 0, 0);
+        TextView name = text("QWANT", 21, WHITE, true);
         name.setLetterSpacing(0.12f);
-        TextView version = text("SYSTEM INTERFACE  /  0.1.0", 10, MUTED, true);
-        version.setLetterSpacing(0.08f);
+        TextView version = text("SYSTEM INTERFACE  /  0.2.0", 9, MUTED, true);
+        version.setLetterSpacing(0.07f);
         brand.addView(name);
         brand.addView(version);
         top.addView(brand, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
+        LinearLayout timeBlock = new LinearLayout(this);
+        timeBlock.setOrientation(LinearLayout.VERTICAL);
+        timeBlock.setGravity(Gravity.RIGHT);
         clockView = text("--:--", 20, WHITE, true);
-        clockView.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
-        top.addView(clockView);
+        dateView = text("--", 10, MUTED, false);
+        timeBlock.addView(clockView);
+        timeBlock.addView(dateView);
+        top.addView(timeBlock);
         page.addView(top);
-        space(page, 25);
+        space(page, compact ? 17 : 24);
 
-        TextView eyebrow = text("PERSONAL DEVICE ENVIRONMENT", 10, CYAN, true);
+        TextView eyebrow = text("PERSONAL DEVICE ENVIRONMENT", 9, accent, true);
         eyebrow.setLetterSpacing(0.13f);
         page.addView(eyebrow);
-        TextView heading = text("Twój pulpit.", 30, WHITE, true);
-        heading.setPadding(0, dp(5), 0, 0);
+        TextView heading = text("Twój pulpit.", compact ? 27 : 30, WHITE, true);
+        heading.setPadding(0, dp(4), 0, 0);
         page.addView(heading);
-        TextView subtitle = text("REDMAGIC 7  •  QwantSYS Foundation", 13, MUTED, false);
+        TextView subtitle = text(Build.MODEL + "  •  QwantSYS Foundation", 12, MUTED, false);
         subtitle.setPadding(0, dp(4), 0, 0);
         page.addView(subtitle);
-        space(page, 22);
+        space(page, compact ? 14 : 20);
 
-        LinearLayout status = new LinearLayout(this);
-        status.setOrientation(LinearLayout.VERTICAL);
-        status.setPadding(dp(17), dp(15), dp(17), dp(15));
-        status.setBackground(round(PANEL_ALT, LINE, 18));
-        TextView statusTitle = text("QWANT CORE", 11, CYAN, true);
-        statusTitle.setLetterSpacing(0.12f);
+        LinearLayout status = cardContainer(PANEL_ALT, 17);
+        TextView statusTitle = text("QWANT CORE  /  LOCAL SESSION", 10, accent, true);
+        statusTitle.setLetterSpacing(0.10f);
         status.addView(statusTitle);
-        TextView statusBody = text("Warstwa interfejsu działa lokalnie. Android pozostaje systemem bazowym.", 13, WHITE, false);
+        statusBody = text("Warstwa interfejsu działa lokalnie. Android pozostaje systemem bazowym.", 12, WHITE, false);
         statusBody.setPadding(0, dp(7), 0, 0);
         statusBody.setLineSpacing(dp(3), 1.0f);
         status.addView(statusBody);
         page.addView(status, fullWidth());
 
-        section(page, "MONITOR SPRZĘTU", "Odświeżanie co 4 sekundy");
+        section(page, "SZYBKIE SKRÓTY", "Ustawienia telefonu");
+        LinearLayout quick = metricRow();
+        quick.addView(actionCard("⌁", "Wi-Fi", "Sieci bezprzewodowe", () -> openSettings(Settings.ACTION_WIFI_SETTINGS)), weightParams());
+        quick.addView(actionCard("ᛒ", "Bluetooth", "Połączenia", () -> openSettings(Settings.ACTION_BLUETOOTH_SETTINGS)), weightParams());
+        quick.addView(actionCard("◉", "Bateria", "Zasilanie", () -> openSettings(Settings.ACTION_BATTERY_SAVER_SETTINGS)), weightParams());
+        page.addView(quick);
+
+        section(page, "MONITOR SPRZĘTU", "Dane dostępne przez Android API i uprawnione odczyty");
         LinearLayout rowOne = metricRow();
-        rowOne.addView(metricCard("CPU", "Odczyt...", "Częstotliwość / klastry", (v) -> cpuValue = v), weightParams());
-        rowOne.addView(metricCard("PAMIĘĆ RAM", "Odczyt...", "Dostępna pamięć", (v) -> ramValue = v), weightParams());
+        rowOne.addView(metricCard("CPU", "—", "Rdzenie / częstotliwość", v -> cpuValue = v), weightParams());
+        rowOne.addView(metricCard("PAMIĘĆ RAM", "—", "Dostępna pamięć", v -> ramValue = v), weightParams());
         page.addView(rowOne);
-        space(page, 10);
+        space(page, 8);
 
         LinearLayout rowTwo = metricRow();
-        rowTwo.addView(metricCard("BATERIA", "Odczyt...", "Poziom naładowania", (v) -> batteryValue = v), weightParams());
-        rowTwo.addView(metricCard("TERMika", "Odczyt...", "Temperatura / stan", (v) -> thermalValue = v), weightParams());
+        rowTwo.addView(metricCard("BATERIA", "—", "Poziom naładowania", v -> batteryValue = v, true), weightParams());
+        rowTwo.addView(metricCard("TERMika", "—", "Stan termiczny urządzenia", v -> thermalValue = v), weightParams());
         page.addView(rowTwo);
-        space(page, 10);
+        space(page, 8);
 
         LinearLayout rowThree = metricRow();
-        rowThree.addView(metricCard("PAMIĘĆ URZĄDZENIA", "Odczyt...", "Wolne miejsce /data", (v) -> storageValue = v), weightParams());
-        rowThree.addView(metricCard("URZĄDZENIE", "REDMAGIC 7", "Model i wersja Androida", (v) -> deviceValue = v), weightParams());
+        rowThree.addView(metricCard("WOLNE MIEJSCE", "—", "Pamięć danych", v -> storageValue = v), weightParams());
+        rowThree.addView(metricCard("SYSTEM", "Android", "Wersja platformy", v -> deviceValue = v), weightParams());
         page.addView(rowThree);
 
-        section(page, "CENTRUM FUNKCJI", "Skróty do Androida i aplikacji");
+        section(page, "CENTRUM QWANT", "Aplikacje, diagnostyka i konfiguracja");
         LinearLayout actionsA = metricRow();
-        actionsA.addView(actionCard("▦", "Aplikacje", "Otwórz listę aplikacji", this::openAppDrawer), weightParams());
-        actionsA.addView(actionCard("⚙", "Ustawienia", "Konfiguracja telefonu", () -> openSettings(Settings.ACTION_SETTINGS)), weightParams());
+        actionsA.addView(actionCard("▦", "Aplikacje", "Szukaj i uruchamiaj", this::openAppDrawer), weightParams());
+        actionsA.addView(actionCard("⌁", "Monitor", "Szczegóły sprzętu", this::openHardwareDashboard), weightParams());
         page.addView(actionsA);
-        space(page, 10);
+        space(page, 8);
 
         LinearLayout actionsB = metricRow();
-        actionsB.addView(actionCard("◉", "Wyświetlacz", "Ekran i jasność", () -> openSettings(Settings.ACTION_DISPLAY_SETTINGS)), weightParams());
-        actionsB.addView(actionCard("⌂", "Domyślny pulpit", "Ustaw Qwant jako Home", this::openHomeSettings), weightParams());
+        actionsB.addView(actionCard("✧", "Wygląd", "Kolor i układ pulpitu", this::openCustomization), weightParams());
+        actionsB.addView(actionCard("⚙", "Ustawienia", "Konfiguracja Androida", () -> openSettings(Settings.ACTION_SETTINGS)), weightParams());
         page.addView(actionsB);
+        space(page, 8);
 
-        section(page, "WARSTWA OBLICZENIOWA", "Wykrywanie możliwości urządzenia");
-        LinearLayout aiCard = new LinearLayout(this);
-        aiCard.setOrientation(LinearLayout.VERTICAL);
-        aiCard.setPadding(dp(17), dp(15), dp(17), dp(15));
-        aiCard.setBackground(round(PANEL, LINE, 18));
-        aiValue = text("Android NNAPI", 18, WHITE, true);
-        aiCard.addView(aiValue);
-        TextView aiNote = text("Akceleratory Qualcomm są widoczne w diagnostyce systemowej. Dostęp aplikacji do poszczególnych sterowników wymaga osobnej weryfikacji.", 12, MUTED, false);
+        LinearLayout actionsC = metricRow();
+        actionsC.addView(actionCard("⌂", "Domyślny pulpit", "Zarządzaj ekranem Home", this::openHomeSettings), fullWidth());
+        page.addView(actionsC);
+
+        section(page, "WARSTWA OBLICZENIOWA", "AI i akceleratory");
+        LinearLayout aiCard = cardContainer(PANEL, 17);
+        TextView aiTitle = text("ANDROID NNAPI", 15, WHITE, true);
+        aiCard.addView(aiTitle);
+        TextView aiNote = text("Interfejs Neural Networks jest częścią platformy. Wykrycie usług Qualcomm w systemie nie oznacza automatycznego dostępu aplikacji do DSP lub GPU.", 11, MUTED, false);
         aiNote.setPadding(0, dp(6), 0, 0);
         aiNote.setLineSpacing(dp(3), 1.0f);
         aiCard.addView(aiNote);
         page.addView(aiCard, fullWidth());
 
-        section(page, "INFORMACJE", "QwantSYS 0.1.0 • wydanie testowe");
-        detailValue = text("Brak dodatkowych danych.", 12, MUTED, false);
-        detailValue.setPadding(dp(15), dp(13), dp(15), dp(13));
-        detailValue.setBackground(round(PANEL, LINE, 16));
+        section(page, "INFORMACJE O URZĄDZENIU", "QwantSYS 0.2.0 • testowa nakładka Androida");
+        detailValue = text("Ładowanie danych urządzenia…", 11, MUTED, false);
+        detailValue.setPadding(dp(14), dp(12), dp(14), dp(12));
+        detailValue.setBackground(round(PANEL, LINE, 15));
         page.addView(detailValue, fullWidth());
 
-        TextView footer = text("QWANT  •  ZBUDOWANY NA ANDROIDZIE  •  NX679J", 9, MUTED, true);
+        TextView footer = text("QWANT  •  ANDROID OVERLAY  •  NX679J", 9, MUTED, true);
         footer.setGravity(Gravity.CENTER);
         footer.setLetterSpacing(0.08f);
-        footer.setPadding(0, dp(25), 0, dp(5));
+        footer.setPadding(0, dp(23), 0, dp(5));
         page.addView(footer);
 
         setContentView(scroll);
+        refreshMetrics();
     }
 
-    private interface ValueSetter {
-        void set(TextView view);
-    }
+    private interface ValueSetter { void set(TextView view); }
 
     private LinearLayout metricCard(String title, String initial, String hint, ValueSetter setter) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(14), dp(12), dp(14));
-        card.setMinimumHeight(dp(112));
-        card.setBackground(round(PANEL, LINE, 17));
+        return metricCard(title, initial, hint, setter, false);
+    }
 
+    private LinearLayout metricCard(String title, String initial, String hint, ValueSetter setter, boolean battery) {
+        LinearLayout card = cardContainer(PANEL, 15);
+        card.setMinimumHeight(dp(compact ? 94 : 106));
         TextView titleView = text(title, 9, MUTED, true);
-        titleView.setLetterSpacing(0.08f);
-        TextView value = text(initial, 20, WHITE, true);
-        value.setPadding(0, dp(12), 0, dp(4));
-        TextView hintView = text(hint, 10, MUTED, false);
-
+        titleView.setLetterSpacing(0.07f);
+        TextView value = text(initial, 19, WHITE, true);
+        value.setPadding(0, dp(compact ? 8 : 11), 0, dp(3));
+        TextView hintView = text(hint, 9, MUTED, false);
         card.addView(titleView);
         card.addView(value);
         card.addView(hintView);
+        if (battery) batteryHint = hintView;
         setter.set(value);
         return card;
     }
 
     private LinearLayout actionCard(String symbol, String title, String hint, Runnable action) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(14), dp(12), dp(14));
-        card.setMinimumHeight(dp(92));
-        card.setBackground(round(PANEL_ALT, LINE, 17));
+        LinearLayout card = cardContainer(PANEL_ALT, 15);
+        card.setMinimumHeight(dp(compact ? 76 : 87));
         card.setClickable(true);
         card.setFocusable(true);
         card.setOnClickListener(v -> action.run());
-
-        TextView icon = text(symbol, 21, CYAN, true);
-        TextView label = text(title, 14, WHITE, true);
-        label.setPadding(0, dp(8), 0, dp(3));
-        TextView desc = text(hint, 10, MUTED, false);
+        TextView icon = text(symbol, 19, accent, true);
+        TextView label = text(title, 12, WHITE, true);
+        label.setPadding(0, dp(6), 0, dp(2));
+        TextView desc = text(hint, 9, MUTED, false);
         card.addView(icon);
         card.addView(label);
         card.addView(desc);
+        return card;
+    }
+
+    private LinearLayout cardContainer(int color, int radius) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int p = compact ? 11 : 14;
+        card.setPadding(dp(p), dp(p), dp(p), dp(p));
+        card.setBackground(round(color, LINE, radius));
         return card;
     }
 
@@ -258,10 +299,10 @@ public final class MainActivity extends Activity {
         LinearLayout block = new LinearLayout(this);
         block.setGravity(Gravity.CENTER_VERTICAL);
         block.setOrientation(LinearLayout.VERTICAL);
-        block.setPadding(0, dp(23), 0, dp(11));
-        TextView heading = text(title, 11, CYAN, true);
-        heading.setLetterSpacing(0.10f);
-        TextView note = text(subtitle, 10, MUTED, false);
+        block.setPadding(0, dp(compact ? 17 : 22), 0, dp(9));
+        TextView heading = text(title, 10, accent, true);
+        heading.setLetterSpacing(0.09f);
+        TextView note = text(subtitle, 9, MUTED, false);
         note.setPadding(0, dp(3), 0, 0);
         block.addView(heading);
         block.addView(note);
@@ -275,35 +316,35 @@ public final class MainActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams weightParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        params.setMargins(dp(4), 0, dp(4), 0);
-        return params;
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        p.setMargins(dp(3), 0, dp(3), 0);
+        return p;
     }
 
     private LinearLayout.LayoutParams fullWidth() {
         return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
-    private void space(LinearLayout parent, int heightDp) {
-        View spacer = new View(this);
-        parent.addView(spacer, new LinearLayout.LayoutParams(1, dp(heightDp)));
+    private void space(LinearLayout parent, int h) {
+        View v = new View(this);
+        parent.addView(v, new LinearLayout.LayoutParams(1, dp(h)));
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
-        TextView view = new TextView(this);
-        view.setText(value);
-        view.setTextSize(size);
-        view.setTextColor(color);
-        view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
-        return view;
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextSize(size);
+        v.setTextColor(color);
+        v.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
+        return v;
     }
 
-    private GradientDrawable round(int color, int stroke, int radiusDp) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(dp(radiusDp));
-        drawable.setStroke(dp(1), stroke);
-        return drawable;
+    private GradientDrawable round(int color, int stroke, int radius) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(dp(radius));
+        d.setStroke(dp(1), stroke);
+        return d;
     }
 
     private int dp(float value) {
@@ -311,80 +352,76 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshMetrics() {
-        if (isFinishing()) return;
-        clockView.setText(new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date()));
+        if (isFinishing() || clockView == null) return;
+        Date now = new Date();
+        clockView.setText(new SimpleDateFormat(clock24 ? "HH:mm" : "h:mm a", Locale.getDefault()).format(now));
+        dateView.setText(new SimpleDateFormat("EEE, d MMM", Locale.getDefault()).format(now));
 
         cpuValue.setText(cpuSummary());
 
         ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
         ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        String availableRam = "—";
         if (manager != null) {
             manager.getMemoryInfo(memory);
-            ramValue.setText(formatGb(memory.availMem));
-            ramValue.setTextSize(21);
+            availableRam = formatGb(memory.availMem);
+            ramValue.setText(availableRam);
         }
 
+        String batteryText = "—";
+        String chargeDescription = "Dane baterii niedostępne";
         Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if (battery != null) {
             int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
             int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
             int percent = (level >= 0 && scale > 0) ? Math.round(level * 100f / scale) : -1;
             int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-            String suffix = status == BatteryManager.BATTERY_STATUS_CHARGING
-                    || status == BatteryManager.BATTERY_STATUS_FULL ? " • ładowanie" : "";
-            batteryValue.setText(percent >= 0 ? percent + "%" : "—");
-            batteryValue.setTextSize(21);
-            batteryValue.setContentDescription("Bateria " + percent + " procent" + suffix);
-        } else {
-            batteryValue.setText("—");
+            int temp = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+            boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING
+                    || status == BatteryManager.BATTERY_STATUS_FULL;
+            batteryText = percent >= 0 ? percent + "%" : "—";
+            chargeDescription = charging ? "Ładowanie" : "Praca na baterii";
+            if (temp > 0 && temp < 800) chargeDescription += " • " + String.format(Locale.getDefault(), "%.1f°C", temp / 10f);
+            batteryValue.setText(batteryText);
         }
+        if (batteryHint != null) batteryHint.setText(chargeDescription);
 
         String skin = readThermal("skin-msm-therm");
-        String batteryTemp = readThermal("battery");
-        String thermal = skin != null ? skin : systemThermalStatus();
-        if (thermal != null && batteryTemp != null) {
-            thermalValue.setText(thermal + " / " + batteryTemp);
-            thermalValue.setTextSize(16);
-        } else {
-            thermalValue.setText(thermal != null ? thermal : "Niedostępne");
-            thermalValue.setTextSize(16);
-        }
+        String thermalState = systemThermalStatus();
+        if (skin != null) thermalValue.setText(skin);
+        else thermalValue.setText(thermalState == null ? "Brak odczytu" : thermalState);
 
         try {
             StatFs stats = new StatFs(Environment.getDataDirectory().getAbsolutePath());
             storageValue.setText(formatGb(stats.getAvailableBytes()));
-            storageValue.setTextSize(21);
         } catch (RuntimeException ex) {
             storageValue.setText("—");
         }
-
         deviceValue.setText("Android " + Build.VERSION.RELEASE);
-        deviceValue.setTextSize(17);
 
         int sensorCount = 0;
-        SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-        if (sensorManager != null) {
-            List<Sensor> sensors = sensorManager.getSensorList(Sensor.TYPE_ALL);
+        SensorManager sm = (SensorManager) getSystemService(SENSOR_SERVICE);
+        if (sm != null) {
+            List<Sensor> sensors = sm.getSensorList(Sensor.TYPE_ALL);
             sensorCount = sensors == null ? 0 : sensors.size();
         }
-
-        int cores = Runtime.getRuntime().availableProcessors();
-        String hardware = Build.HARDWARE == null ? "nieznany" : Build.HARDWARE;
+        long totalRam = memory.totalMem;
         detailValue.setText(
                 "Model: " + Build.MODEL + " (" + Build.DEVICE + ")\n"
                 + "Android: " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT + "\n"
-                + "ABI: " + Build.SUPPORTED_ABIS[0] + "\n"
-                + "CPU widziane przez aplikację: " + cores + "\n"
-                + "Warstwa sprzętowa: " + hardware + "\n"
-                + "Czujniki dostępne przez SensorManager: " + sensorCount + "\n"
-                + "Odświeżanie panelu: 4 s"
+                + "ABI: " + (Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "unknown") + "\n"
+                + "CPU logiczne: " + Runtime.getRuntime().availableProcessors() + "\n"
+                + "RAM fizyczny: " + formatGb(totalRam) + " • dostępny: " + availableRam + "\n"
+                + "Czujniki przez SensorManager: " + sensorCount + "\n"
+                + "Interwał odświeżania: 4 sekundy"
         );
-        aiValue.setText(Build.VERSION.SDK_INT >= 27 ? "Android NNAPI • dostępność platformy" : "NNAPI niedostępne");
+        statusBody.setText("Sesja lokalna aktywna • bateria " + batteryText
+                + " • RAM dostępny " + availableRam + ". Android pozostaje systemem bazowym.");
     }
 
     private String cpuSummary() {
-        File base = new File("/sys/devices/system/cpu/cpufreq");
-        File[] policies = base.listFiles((dir, name) -> name.startsWith("policy"));
+        File root = new File("/sys/devices/system/cpu/cpufreq");
+        File[] policies = root.listFiles((dir, name) -> name.startsWith("policy"));
         if (policies == null || policies.length == 0) {
             return Runtime.getRuntime().availableProcessors() + " rdzeni";
         }
@@ -392,33 +429,27 @@ public final class MainActivity extends Activity {
         List<String> values = new ArrayList<>();
         for (File policy : policies) {
             String raw = readText(new File(policy, "scaling_cur_freq"));
-            if (raw == null) raw = readText(new File(policy, "cpuinfo_max_freq"));
             try {
                 double ghz = Long.parseLong(raw) / 1_000_000.0;
                 values.add(String.format(Locale.US, "%.2f", ghz));
             } catch (Exception ignored) {
-                // This policy is not readable in the app sandbox.
+                // Sysfs may be hidden from unprivileged applications.
             }
         }
-        if (values.isEmpty()) return "Dane ograniczone";
-        return String.join(" / ", values) + " GHz";
+        return values.isEmpty() ? Runtime.getRuntime().availableProcessors() + " rdzeni" : String.join(" / ", values) + " GHz";
     }
 
-    private String readThermal(String sensorName) {
-        File thermalRoot = new File("/sys/class/thermal");
-        File[] zones = thermalRoot.listFiles((dir, name) -> name.startsWith("thermal_zone"));
+    private String readThermal(String wanted) {
+        File[] zones = new File("/sys/class/thermal").listFiles((dir, name) -> name.startsWith("thermal_zone"));
         if (zones == null) return null;
         for (File zone : zones) {
-            String name = readText(new File(zone, "type"));
-            if (sensorName.equals(name)) {
-                String raw = readText(new File(zone, "temp"));
-                try {
-                    int value = Integer.parseInt(raw);
-                    if (value <= 0 || value > 150000) return null;
-                    return String.format(Locale.getDefault(), "%.1f°C", value / 1000.0);
-                } catch (Exception ignored) {
-                    return null;
-                }
+            if (!wanted.equals(readText(new File(zone, "type")))) continue;
+            try {
+                int raw = Integer.parseInt(readText(new File(zone, "temp")));
+                if (raw <= 0 || raw > 150000) return null;
+                return String.format(Locale.getDefault(), "%.1f°C", raw / 1000.0);
+            } catch (Exception ignored) {
+                return null;
             }
         }
         return null;
@@ -426,10 +457,10 @@ public final class MainActivity extends Activity {
 
     private String systemThermalStatus() {
         if (Build.VERSION.SDK_INT < 29) return null;
-        PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
-        if (power == null) return null;
+        PowerManager p = (PowerManager) getSystemService(POWER_SERVICE);
+        if (p == null) return null;
         try {
-            switch (power.getCurrentThermalStatus()) {
+            switch (p.getCurrentThermalStatus()) {
                 case PowerManager.THERMAL_STATUS_NONE: return "Normalny";
                 case PowerManager.THERMAL_STATUS_LIGHT: return "Niski";
                 case PowerManager.THERMAL_STATUS_MODERATE: return "Umiarkowany";
@@ -445,8 +476,8 @@ public final class MainActivity extends Activity {
     }
 
     private String readText(File file) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            return reader.readLine();
+        try (BufferedReader r = new BufferedReader(new FileReader(file))) {
+            return r.readLine();
         } catch (Exception ex) {
             return null;
         }
@@ -460,66 +491,200 @@ public final class MainActivity extends Activity {
         Intent query = new Intent(Intent.ACTION_MAIN);
         query.addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> found = getPackageManager().queryIntentActivities(query, 0);
-        List<ResolveInfo> apps = new ArrayList<>();
+        List<AppEntry> entries = new ArrayList<>();
         for (ResolveInfo info : found) {
-            if (info.activityInfo != null && !getPackageName().equals(info.activityInfo.packageName)) {
-                apps.add(info);
-            }
+            if (info.activityInfo == null || getPackageName().equals(info.activityInfo.packageName)) continue;
+            entries.add(new AppEntry(info));
         }
-        apps.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(
-                String.valueOf(a.loadLabel(getPackageManager())),
-                String.valueOf(b.loadLabel(getPackageManager()))
-        ));
-        if (apps.isEmpty()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Aplikacje")
+        entries.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.label, b.label));
+
+        if (entries.isEmpty()) {
+            new AlertDialog.Builder(this).setTitle("Aplikacje")
                     .setMessage("Android nie udostępnił listy aplikacji.")
-                    .setPositiveButton("OK", null)
-                    .show();
+                    .setPositiveButton("OK", null).show();
             return;
         }
-        CharSequence[] labels = new CharSequence[apps.size()];
-        for (int i = 0; i < apps.size(); i++) {
-            labels[i] = apps.get(i).loadLabel(getPackageManager());
-        }
-        new AlertDialog.Builder(this)
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(10), dp(16), dp(4));
+        EditText search = new EditText(this);
+        search.setSingleLine(true);
+        search.setHint("Szukaj aplikacji…");
+        search.setTextColor(WHITE);
+        search.setHintTextColor(MUTED);
+        search.setBackgroundTintList(android.content.res.ColorStateList.valueOf(accent));
+        root.addView(search, fullWidth());
+
+        ListView list = new ListView(this);
+        ArrayAdapter<AppEntry> adapter = new ArrayAdapter<AppEntry>(
+                this, android.R.layout.simple_list_item_1, new ArrayList<>(entries)) {
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                TextView row = (TextView) super.getView(position, convertView, parent);
+                row.setTextColor(WHITE);
+                row.setTextSize(15);
+                row.setPadding(dp(12), dp(10), dp(12), dp(10));
+                return row;
+            }
+        };
+        list.setAdapter(adapter);
+        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(400));
+        root.addView(list, listParams);
+        search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                adapter.getFilter().filter(s);
+            }
+            @Override public void afterTextChanged(Editable e) {}
+        });
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Aplikacje")
-                .setItems(labels, (dialog, which) -> {
-                    ResolveInfo selected = apps.get(which);
-                    ComponentName component = new ComponentName(
-                            selected.activityInfo.packageName,
-                            selected.activityInfo.name
-                    );
+                .setView(root)
+                .setNegativeButton("Zamknij", null)
+                .create();
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            AppEntry selected = adapter.getItem(position);
+            if (selected != null) {
+                try {
                     Intent launch = new Intent(Intent.ACTION_MAIN);
                     launch.addCategory(Intent.CATEGORY_LAUNCHER);
-                    launch.setComponent(component);
-                    try {
-                        startActivity(launch);
-                    } catch (RuntimeException ignored) {
-                        // The selected application may have been removed.
-                    }
-                })
+                    launch.setComponent(new ComponentName(selected.info.activityInfo.packageName,
+                            selected.info.activityInfo.name));
+                    startActivity(launch);
+                    dialog.dismiss();
+                } catch (RuntimeException ignored) {
+                    // App may have been removed after the drawer was populated.
+                }
+            }
+        });
+        dialog.show();
+        dialog.getWindow().setLayout(
+                Math.min(getResources().getDisplayMetrics().widthPixels - dp(40), dp(500)),
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private static final class AppEntry {
+        final ResolveInfo info;
+        final String label;
+        AppEntry(ResolveInfo info) {
+            this.info = info;
+            this.label = String.valueOf(info.loadLabel(info.activityInfo.applicationInfo == null
+                    ? null : null));
+        }
+        @Override public String toString() { return label; }
+    }
+
+    private void openHardwareDashboard() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(18), dp(8), dp(18), dp(8));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content);
+
+        addMonitorSection(content, "CPU / CZĘSTOTLIWOŚĆ", cpuSummary());
+        ActivityManager.MemoryInfo mem = new ActivityManager.MemoryInfo();
+        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (am != null) am.getMemoryInfo(mem);
+        addMonitorSection(content, "PAMIĘĆ RAM", "Całkowita: " + formatGb(mem.totalMem)
+                + "\nDostępna: " + formatGb(mem.availMem)
+                + "\nSwap nie jest raportowany przez publiczne API aplikacji.");
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (battery != null) {
+            int lvl = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+            int temp = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+            int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            addMonitorSection(content, "BATERIA",
+                    "Poziom: " + (lvl >= 0 ? Math.round(lvl * 100f / scale) + "%" : "brak danych")
+                    + "\nTemperatura: " + (temp > 0 ? String.format(Locale.getDefault(), "%.1f°C", temp / 10f) : "brak danych")
+                    + "\nŁadowanie: " + (status == BatteryManager.BATTERY_STATUS_CHARGING ? "tak" : "nie / nieznane"));
+        }
+        addMonitorSection(content, "TEMPERATURA", "Obudowa / skin: " + valueOrDash(readThermal("skin-msm-therm"))
+                + "\nBateria: " + valueOrDash(readThermal("battery"))
+                + "\nStan termiczny Androida: " + valueOrDash(systemThermalStatus()));
+        try {
+            StatFs fs = new StatFs(Environment.getDataDirectory().getAbsolutePath());
+            addMonitorSection(content, "PAMIĘĆ WEWNĘTRZNA", "Wolne: " + formatGb(fs.getAvailableBytes())
+                    + "\nŁącznie: " + formatGb(fs.getTotalBytes()));
+        } catch (RuntimeException ignored) {
+            addMonitorSection(content, "PAMIĘĆ WEWNĘTRZNA", "Odczyt niedostępny");
+        }
+        SensorManager sm = (SensorManager) getSystemService(SENSOR_SERVICE);
+        int sensors = sm == null ? 0 : sm.getSensorList(Sensor.TYPE_ALL).size();
+        addMonitorSection(content, "CZUJNIKI", "Liczba czujników widocznych dla aplikacji: " + sensors);
+        addMonitorSection(content, "GPU / AI", "GPU: Adreno (identyfikacja z profilu urządzenia)\nNNAPI: interfejs platformy Android. Dostęp do akceleratorów Qualcomm wymaga niezależnego testu.");
+        addMonitorSection(content, "OGRANICZENIA", "Aplikacja nie ma uprawnień root ani systemowego DUMP. Część odczytów CPU i temperatur może być niedostępna w sandboxie Androida.");
+
+        new AlertDialog.Builder(this)
+                .setTitle("Qwant Hardware Monitor  •  0.2.0")
+                .setView(scroll)
+                .setPositiveButton("Odśwież pulpit", (d, w) -> refreshMetrics())
                 .setNegativeButton("Zamknij", null)
                 .show();
+    }
+
+    private void addMonitorSection(LinearLayout root, String title, String body) {
+        TextView h = text(title, 10, accent, true);
+        h.setPadding(0, dp(12), 0, dp(4));
+        TextView b = text(body, 12, WHITE, false);
+        b.setLineSpacing(dp(3), 1.0f);
+        root.addView(h);
+        root.addView(b);
+    }
+
+    private String valueOrDash(String v) { return v == null ? "brak odczytu" : v; }
+
+    private void openCustomization() {
+        int selected = 0;
+        for (int i = 0; i < ACCENTS.length; i++) if (ACCENTS[i] == accent) selected = i;
+        AlertDialog palette = new AlertDialog.Builder(this)
+                .setTitle("Kolor interfejsu")
+                .setSingleChoiceItems(ACCENT_NAMES, selected, (d, which) -> {
+                    accent = ACCENTS[which];
+                    preferences.edit().putInt("accent", accent).apply();
+                    d.dismiss();
+                    openLayoutOptions();
+                })
+                .setNeutralButton("Układ i zegar", (d, w) -> openLayoutOptions())
+                .setNegativeButton("Gotowe", null)
+                .create();
+        palette.show();
+    }
+
+    private void openLayoutOptions() {
+        boolean[] checked = {compact, clock24};
+        String[] labels = {"Układ kompaktowy", "Zegar 24-godzinny"};
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Personalizacja pulpitu")
+                .setMultiChoiceItems(labels, checked, (d, which, value) -> {
+                    if (which == 0) compact = value;
+                    if (which == 1) clock24 = value;
+                })
+                .setPositiveButton("Zapisz", (d, w) -> {
+                    preferences.edit()
+                            .putBoolean("compact", compact)
+                            .putBoolean("clock24", clock24)
+                            .apply();
+                    buildInterface();
+                })
+                .setNegativeButton("Anuluj", null)
+                .create();
+        dialog.show();
     }
 
     private void openSettings(String action) {
         try {
             startActivity(new Intent(action));
         } catch (RuntimeException ex) {
-            try {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
-            } catch (RuntimeException ignored) {
-                // Leave the launcher available if Settings cannot be opened.
-            }
+            try { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+            catch (RuntimeException ignored) { }
         }
     }
 
     private void openHomeSettings() {
-        try {
-            startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
-        } catch (RuntimeException ex) {
-            openSettings(Settings.ACTION_SETTINGS);
-        }
+        try { startActivity(new Intent(Settings.ACTION_HOME_SETTINGS)); }
+        catch (RuntimeException ex) { openSettings(Settings.ACTION_SETTINGS); }
     }
 }
