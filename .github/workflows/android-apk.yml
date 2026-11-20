@@ -55,6 +55,7 @@ jobs:
             -I "$ANDROID_JAR" \
             --manifest qwant/launcher/src/main/AndroidManifest.xml \
             -R build/resources.zip \
+            --auto-add-overlay \
             --java build/generated \
             --min-sdk-version 26 \
             --target-sdk-version 33 \
