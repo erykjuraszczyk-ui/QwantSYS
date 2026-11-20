@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -15,7 +16,16 @@ std::mutex g_mutex;
 llama_model * g_model = nullptr;
 llama_context * g_context = nullptr;
 llama_sampler * g_sampler = nullptr;
+llama_model * g_embedding_model = nullptr;
+llama_context * g_embedding_context = nullptr;
 bool g_backend_ready = false;
+
+void release_backend_if_unused() {
+    if (g_model == nullptr && g_embedding_model == nullptr && g_backend_ready) {
+        llama_backend_free();
+        g_backend_ready = false;
+    }
+}
 
 void release_locked() {
     if (g_sampler) {
@@ -30,10 +40,19 @@ void release_locked() {
         llama_model_free(g_model);
         g_model = nullptr;
     }
-    if (g_backend_ready) {
-        llama_backend_free();
-        g_backend_ready = false;
+    release_backend_if_unused();
+}
+
+void release_embedding_locked() {
+    if (g_embedding_context) {
+        llama_free(g_embedding_context);
+        g_embedding_context = nullptr;
     }
+    if (g_embedding_model) {
+        llama_model_free(g_embedding_model);
+        g_embedding_model = nullptr;
+    }
+    release_backend_if_unused();
 }
 
 jstring java_string(JNIEnv * env, const std::string & value) {
@@ -177,4 +196,134 @@ JNIEXPORT void JNICALL
 Java_com_qwant_launcher_LocalLlamaEngine_nativeRelease(JNIEnv *, jclass) {
     std::lock_guard<std::mutex> lock(g_mutex);
     release_locked();
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_qwant_launcher_LocalEmbeddingEngine_nativeLoad(
+        JNIEnv * env, jclass, jstring model_path, jint threads) {
+    if (model_path == nullptr) return java_string(env, "Nie podano ścieżki modelu embeddingów.");
+    const char * path = env->GetStringUTFChars(model_path, nullptr);
+    if (path == nullptr) return java_string(env, "Nie można odczytać ścieżki modelu embeddingów.");
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    release_embedding_locked();
+
+    if (!g_backend_ready) {
+        llama_backend_init();
+        g_backend_ready = true;
+    }
+
+    llama_model_params model_params = llama_model_default_params();
+    model_params.n_gpu_layers = 0;
+    g_embedding_model = llama_model_load_from_file(path, model_params);
+    env->ReleaseStringUTFChars(model_path, path);
+
+    if (g_embedding_model == nullptr) {
+        release_embedding_locked();
+        return java_string(env, "llama.cpp nie odczytał modelu multilingual-e5-small.");
+    }
+    if (!llama_model_has_encoder(g_embedding_model)) {
+        release_embedding_locked();
+        return java_string(env, "Model nie udostępnia architektury enkodera wymaganej do embeddings.");
+    }
+
+    llama_context_params context_params = llama_context_default_params();
+    context_params.n_ctx = 512;
+    context_params.n_batch = 512;
+    context_params.n_ubatch = 128;
+    const int thread_count = std::max(2, std::min(4, static_cast<int>(threads)));
+    context_params.n_threads = thread_count;
+    context_params.n_threads_batch = thread_count;
+    context_params.embeddings = true;
+    context_params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
+    context_params.attention_type = LLAMA_ATTENTION_TYPE_NON_CAUSAL;
+
+    g_embedding_context = llama_init_from_model(g_embedding_model, context_params);
+    if (g_embedding_context == nullptr) {
+        release_embedding_locked();
+        return java_string(env, "Nie udało się utworzyć kontekstu embeddingów.");
+    }
+
+    __android_log_print(ANDROID_LOG_INFO, TAG,
+            "multilingual-e5-small loaded on CPU, dim=%d, threads=%d",
+            llama_model_n_embd_out(g_embedding_model), thread_count);
+    return java_string(env, "");
+}
+
+extern "C"
+JNIEXPORT jfloatArray JNICALL
+Java_com_qwant_launcher_LocalEmbeddingEngine_nativeEmbed(
+        JNIEnv * env, jclass, jstring text_value, jboolean is_query) {
+    if (text_value == nullptr) return nullptr;
+    const char * chars = env->GetStringUTFChars(text_value, nullptr);
+    if (chars == nullptr) return nullptr;
+    std::string tagged = is_query == JNI_TRUE ? "query: " : "passage: ";
+    tagged += chars;
+    env->ReleaseStringUTFChars(text_value, chars);
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_embedding_model == nullptr || g_embedding_context == nullptr) return nullptr;
+
+    const llama_vocab * vocab = llama_model_get_vocab(g_embedding_model);
+    if (vocab == nullptr) return nullptr;
+
+    std::vector<llama_token> tokens(512);
+    int32_t token_count = llama_tokenize(vocab, tagged.c_str(),
+            static_cast<int32_t>(tagged.size()), tokens.data(),
+            static_cast<int32_t>(tokens.size()), true, true);
+    if (token_count < 0) {
+        const size_t required = static_cast<size_t>(-token_count);
+        if (required > 512) return nullptr;
+        tokens.resize(required);
+        token_count = llama_tokenize(vocab, tagged.c_str(),
+                static_cast<int32_t>(tagged.size()), tokens.data(),
+                static_cast<int32_t>(tokens.size()), true, true);
+    }
+    if (token_count <= 0 || token_count > 512) return nullptr;
+    tokens.resize(static_cast<size_t>(token_count));
+
+    llama_memory_clear(llama_get_memory(g_embedding_context), true);
+    llama_batch batch = llama_batch_get_one(tokens.data(), token_count);
+    const int32_t encode_result = llama_encode(g_embedding_context, batch);
+    if (encode_result != 0) {
+        llama_memory_clear(llama_get_memory(g_embedding_context), true);
+        __android_log_print(ANDROID_LOG_WARN, TAG, "E5 encode failed, status=%d", encode_result);
+        return nullptr;
+    }
+
+    float * pooled = llama_get_embeddings_seq(g_embedding_context, 0);
+    const int32_t dimensions = llama_model_n_embd_out(g_embedding_model);
+    if (pooled == nullptr || dimensions <= 0 || dimensions > 4096) {
+        llama_memory_clear(llama_get_memory(g_embedding_context), true);
+        return nullptr;
+    }
+
+    double norm_squared = 0.0;
+    for (int32_t i = 0; i < dimensions; ++i) {
+        norm_squared += static_cast<double>(pooled[i]) * pooled[i];
+    }
+    const double norm = std::sqrt(norm_squared);
+    if (!std::isfinite(norm) || norm < 1.0e-12) {
+        llama_memory_clear(llama_get_memory(g_embedding_context), true);
+        return nullptr;
+    }
+
+    std::vector<jfloat> normalized(static_cast<size_t>(dimensions));
+    for (int32_t i = 0; i < dimensions; ++i) {
+        normalized[static_cast<size_t>(i)] = static_cast<jfloat>(pooled[i] / norm);
+    }
+    llama_memory_clear(llama_get_memory(g_embedding_context), true);
+
+    jfloatArray result = env->NewFloatArray(dimensions);
+    if (result == nullptr) return nullptr;
+    env->SetFloatArrayRegion(result, 0, dimensions, normalized.data());
+    return result;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_qwant_launcher_LocalEmbeddingEngine_nativeRelease(JNIEnv *, jclass) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    release_embedding_locked();
 }

@@ -61,3 +61,19 @@ The launcher is an Android application prototype for REDMAGIC 7 (arm64-v8a), not
 - All records remain on the device in the app's private storage. Clearing app data or uninstalling the app deletes them.
 
 See [Memory Core 0.7.0 technical notes](docs/MEMORY_CORE_0.7.0.md).
+
+
+## Qwant Launcher prototype — 0.8.0
+
+### Semantic Memory Core
+
+- Adds a separate `multilingual-e5-small` Q8_0 GGUF embedding model (about 126 MiB), downloaded on demand; it is not bundled into the APK.
+- Creates normalized 384-dimensional vectors using the local llama.cpp CPU runtime.
+- Stores vectors in the app-private SQLite `memories.embedding` BLOB column. Schema migration preserves existing 0.7.0 memory records.
+- Indexes older unembedded records after E5 is loaded; new entries are embedded automatically while the model is active.
+- Searches with cosine similarity. The E5 model's required prefixes are applied: `passage: ` when storing records and `query: ` when searching.
+- If E5 is not active or no vector match is available, the app falls back to lexical search.
+- Qwen chat and E5 embeddings use separate model contexts but share the native runtime and are serialized by its mutex.
+- All inference and storage remain on the phone after model download. No cloud inference endpoint is used by this feature.
+
+See [Semantic Memory Core 0.8.0 technical notes](docs/SEMANTIC_MEMORY_0.8.0.md).

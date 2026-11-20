@@ -7,6 +7,8 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import java.text.Normalizer;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -16,7 +18,7 @@ import java.util.Set;
 
 public final class LocalMemoryStore extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "qwant_memory.db";
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 2;
     private static final int MAX_RECORDS = 500;
     private static final int MAX_BODY_LENGTH = 4000;
 
@@ -54,13 +56,16 @@ public final class LocalMemoryStore extends SQLiteOpenHelper {
                 + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "category TEXT NOT NULL,"
                 + "body TEXT NOT NULL,"
-                + "created_at INTEGER NOT NULL)");
+                + "created_at INTEGER NOT NULL,"
+                + "embedding BLOB)");
         db.execSQL("CREATE INDEX memories_created_at ON memories(created_at DESC)");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // Future schema upgrades must preserve user records.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE memories ADD COLUMN embedding BLOB");
+        }
     }
 
     public synchronized long addMemory(String body, String category) {
@@ -126,6 +131,101 @@ public final class LocalMemoryStore extends SQLiteOpenHelper {
             result.add(matches.get(i).memory);
         }
         return result;
+    }
+
+    public synchronized List<Memory> listUnembedded(int requestedLimit) {
+        int limit = Math.max(1, Math.min(requestedLimit, MAX_RECORDS));
+        ArrayList<Memory> result = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query(
+                "memories",
+                new String[]{"_id", "category", "body", "created_at"},
+                "embedding IS NULL", null, null, null,
+                "created_at ASC, _id ASC",
+                String.valueOf(limit))) {
+            while (cursor.moveToNext()) result.add(readMemory(cursor));
+        }
+        return result;
+    }
+
+    public synchronized boolean updateEmbedding(long id, float[] embedding) {
+        if (embedding == null || embedding.length != 384) return false;
+        double normSquared = 0.0;
+        for (float value : embedding) {
+            if (!Float.isFinite(value)) return false;
+            normSquared += (double) value * value;
+        }
+        double norm = Math.sqrt(normSquared);
+        if (!Double.isFinite(norm) || norm < 1.0e-12) return false;
+
+        ByteBuffer buffer = ByteBuffer.allocate(embedding.length * 4).order(ByteOrder.LITTLE_ENDIAN);
+        for (float value : embedding) buffer.putFloat((float) (value / norm));
+        ContentValues values = new ContentValues();
+        values.put("embedding", buffer.array());
+        return getWritableDatabase().update("memories", values, "_id=?",
+                new String[]{String.valueOf(id)}) > 0;
+    }
+
+    public synchronized List<Memory> searchSemantic(float[] queryEmbedding, int requestedLimit) {
+        int limit = Math.max(1, Math.min(requestedLimit, 50));
+        if (queryEmbedding == null || queryEmbedding.length != 384) return Collections.emptyList();
+
+        double queryNormSquared = 0.0;
+        for (float value : queryEmbedding) {
+            if (!Float.isFinite(value)) return Collections.emptyList();
+            queryNormSquared += (double) value * value;
+        }
+        double queryNorm = Math.sqrt(queryNormSquared);
+        if (!Double.isFinite(queryNorm) || queryNorm < 1.0e-12) return Collections.emptyList();
+
+        ArrayList<SemanticResult> matches = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query(
+                "memories",
+                new String[]{"_id", "category", "body", "created_at", "embedding"},
+                "embedding IS NOT NULL", null, null, null, null)) {
+            while (cursor.moveToNext()) {
+                byte[] raw = cursor.getBlob(4);
+                if (raw == null || raw.length != 384 * 4) continue;
+                ByteBuffer vector = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN);
+                double dot = 0.0;
+                for (int i = 0; i < 384; i++) {
+                    dot += (double) queryEmbedding[i] * vector.getFloat();
+                }
+                double score = dot / queryNorm;
+                if (Double.isFinite(score)) {
+                    matches.add(new SemanticResult(readMemory(cursor), score));
+                }
+            }
+        }
+        matches.sort((left, right) -> Double.compare(right.score, left.score));
+
+        ArrayList<Memory> result = new ArrayList<>();
+        for (int i = 0; i < matches.size() && i < limit; i++) {
+            result.add(matches.get(i).memory);
+        }
+        return result;
+    }
+
+    public synchronized int embeddedCount() {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM memories WHERE embedding IS NOT NULL", null)) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+    }
+
+    public synchronized int unembeddedCount() {
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM memories WHERE embedding IS NULL", null)) {
+            return cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+    }
+
+    private static final class SemanticResult {
+        final Memory memory;
+        final double score;
+        SemanticResult(Memory memory, double score) {
+            this.memory = memory;
+            this.score = score;
+        }
     }
 
     public synchronized boolean delete(long id) {
