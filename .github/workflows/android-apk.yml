@@ -59,11 +59,11 @@ jobs:
             --java build/generated \
             --min-sdk-version 26 \
             --target-sdk-version 33 \
-            --version-code 3 \
+            --version-code 4 \
             --version-name 0.4.0 \
             -o build/app-unsigned.apk
 
-          mapfile -t JAVA_FILES < <(find qwant/launcher/src/main/java -name '*.java' -type f | sort)
+          mapfile -t JAVA_FILES < <(find qwant/launcher/src/main/java build/generated -name '*.java' -type f | sort)
           javac -source 17 -target 17 -classpath "$ANDROID_JAR" -d build/classes "${JAVA_FILES[@]}"
 
           mapfile -t CLASS_FILES < <(find build/classes -name '*.class' -type f | sort)
