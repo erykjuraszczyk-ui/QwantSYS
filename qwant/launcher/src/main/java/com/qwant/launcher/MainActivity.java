@@ -147,7 +147,7 @@ public final class MainActivity extends Activity {
         brand.setPadding(dp(12), 0, 0, 0);
         TextView name = text("QWANT", 21, WHITE, true);
         name.setLetterSpacing(0.12f);
-        TextView version = text("SYSTEM INTERFACE  /  0.4.0", 9, MUTED, true);
+        TextView version = text("SYSTEM INTERFACE  /  0.5.0", 9, MUTED, true);
         version.setLetterSpacing(0.07f);
         brand.addView(name);
         brand.addView(version);
@@ -248,7 +248,7 @@ public final class MainActivity extends Activity {
         aiCard.addView(aiNote);
         page.addView(aiCard, fullWidth());
 
-        section(page, "INFORMACJE O URZĄDZENIU", "QwantSYS 0.4.0 • testowa nakładka Androida");
+        section(page, "INFORMACJE O URZĄDZENIU", "QwantSYS 0.5.0 • testowa nakładka Androida");
         detailValue = text("Ładowanie danych urządzenia…", 11, MUTED, false);
         detailValue.setPadding(dp(14), dp(12), dp(14), dp(12));
         detailValue.setBackground(round(PANEL, LINE, 15));
@@ -830,7 +830,7 @@ public final class MainActivity extends Activity {
         addMonitorSection(content, "OGRANICZENIA", "Aplikacja nie ma uprawnień root ani systemowego DUMP. Część odczytów CPU i temperatur może być niedostępna w sandboxie Androida.");
 
         new AlertDialog.Builder(this)
-                .setTitle("Qwant Hardware Monitor  •  0.4.0")
+                .setTitle("Qwant Hardware Monitor  •  0.5.0")
                 .setView(scroll)
                 .setPositiveButton("Odśwież pulpit", (d, w) -> refreshMetrics())
                 .setNegativeButton("Zamknij", null)
