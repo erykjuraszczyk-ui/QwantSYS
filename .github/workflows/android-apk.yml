@@ -35,27 +35,67 @@ jobs:
         run: |
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null || true
           "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
-
-      - name: Build APK
-        run: gradle --no-daemon :qwant:launcher:assembleDebug
-
-      - name: Verify APK output
+      - name: Compile, package and sign APK
         run: |
-          test -s qwant/launcher/build/outputs/apk/debug/launcher-debug.apk
-          file qwant/launcher/build/outputs/apk/debug/launcher-debug.apk
-          sha256sum qwant/launcher/build/outputs/apk/debug/launcher-debug.apk
+          set -euo pipefail
+          SDK_BUILD="$ANDROID_HOME/build-tools/35.0.0"
+          ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$SDK_BUILD/aapt2"
+          test -x "$SDK_BUILD/d8"
+          test -x "$SDK_BUILD/zipalign"
+          test -x "$SDK_BUILD/apksigner"
+          test -s "$ANDROID_JAR"
+
+          mkdir -p build/classes build/dex build/generated out
+          "$SDK_BUILD/aapt2" compile --dir qwant/launcher/src/main/res -o build/resources.zip
+          "$SDK_BUILD/aapt2" link \
+            -I "$ANDROID_JAR" \
+            --manifest qwant/launcher/src/main/AndroidManifest.xml \
+            -R build/resources.zip \
+            --java build/generated \
+            --min-sdk-version 26 \
+            --target-sdk-version 33 \
+            --version-code 1 \
+            --version-name 0.1.0 \
+            -o build/app-unsigned.apk
+
+          mapfile -t JAVA_FILES < <(find qwant/launcher/src/main/java -name '*.java' -type f | sort)
+          javac -source 17 -target 17 -classpath "$ANDROID_JAR" -d build/classes "${JAVA_FILES[@]}"
+
+          mapfile -t CLASS_FILES < <(find build/classes -name '*.class' -type f | sort)
+          "$SDK_BUILD/d8" --lib "$ANDROID_JAR" --min-api 26 --output build/dex "${CLASS_FILES[@]}"
+
+          cp build/app-unsigned.apk build/app-with-dex.apk
+          (cd build/dex && zip -q -j ../app-with-dex.apk classes.dex)
+          "$SDK_BUILD/zipalign" -f -p 4 build/app-with-dex.apk build/app-aligned.apk
+
+          keytool -genkeypair -v \
+            -keystore build/qwant-debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -dname "CN=Qwant Debug,O=QwantSYS,C=PL"
+
+          "$SDK_BUILD/apksigner" sign \
+            --ks build/qwant-debug.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --out out/QwantSYS-REDMAGIC7-Launcher-0.1.0.apk \
+            build/app-aligned.apk
+
+          "$SDK_BUILD/apksigner" verify --verbose --print-certs out/QwantSYS-REDMAGIC7-Launcher-0.1.0.apk
+          file out/QwantSYS-REDMAGIC7-Launcher-0.1.0.apk
+          sha256sum out/QwantSYS-REDMAGIC7-Launcher-0.1.0.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: QwantSYS-REDMAGIC7-Launcher-0.1.0
-          path: qwant/launcher/build/outputs/apk/debug/launcher-debug.apk
+          path: out/QwantSYS-REDMAGIC7-Launcher-0.1.0.apk
           if-no-files-found: error
           retention-days: 30
