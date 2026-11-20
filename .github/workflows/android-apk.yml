@@ -1,4 +1,4 @@
-name: QwantSYS Launcher 0.9.0 APK
+name: QwantSYS Launcher 1.0.0 APK
 
 on:
   push:
@@ -90,8 +90,8 @@ jobs:
             --java build/generated \
             --min-sdk-version 26 \
             --target-sdk-version 33 \
-            --version-code 8 \
-            --version-name 0.9.0 \
+            --version-code 10 \
+            --version-name 1.0.0 \
             -o build/app-unsigned.apk
 
           mapfile -t JAVA_FILES < <(find qwant/launcher/src/main/java build/generated -name '*.java' -type f | sort)
@@ -120,17 +120,17 @@ jobs:
             --ks-pass pass:android \
             --key-pass pass:android \
             --ks-key-alias androiddebugkey \
-            --out out/QwantSYS-REDMAGIC7-Launcher-0.9.0.apk \
+            --out out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk \
             build/app-aligned.apk
 
-          "$SDK_BUILD/apksigner" verify --verbose --print-certs out/QwantSYS-REDMAGIC7-Launcher-0.9.0.apk
-          file out/QwantSYS-REDMAGIC7-Launcher-0.9.0.apk
-          sha256sum out/QwantSYS-REDMAGIC7-Launcher-0.9.0.apk
+          "$SDK_BUILD/apksigner" verify --verbose --print-certs out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
+          file out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
+          sha256sum out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QwantSYS-REDMAGIC7-Launcher-0.9.0
-          path: out/QwantSYS-REDMAGIC7-Launcher-0.9.0.apk
+          name: QwantSYS-REDMAGIC7-Launcher-1.0.0
+          path: out/QwantSYS-REDMAGIC7-Launcher-1.0.0.apk
           if-no-files-found: error
           retention-days: 30

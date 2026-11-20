@@ -109,7 +109,7 @@ public final class CortanaAssistantActivity extends Activity {
         titleBlock.setOrientation(LinearLayout.VERTICAL);
         TextView title = text("CORTANA", 21, WHITE, true);
         title.setLetterSpacing(0.12f);
-        TextView subtitle = text("QWANT SEMANTIC MEMORY  /  0.8.0", 9, accent, true);
+        TextView subtitle = text("CORTANA LOCAL AI  /  1.0.0", 9, accent, true);
         subtitle.setLetterSpacing(0.07f);
         titleBlock.addView(title);
         titleBlock.addView(subtitle);
@@ -120,7 +120,7 @@ public final class CortanaAssistantActivity extends Activity {
         space(page, 12);
 
         TextView info = text(
-                "Tryb lokalny: komendy i pamięć działają na telefonie. Pełny model językowy nie jest jeszcze podłączony.",
+                "Tryb lokalny: komendy i pamięć działają na telefonie. Model Qwen można pobrać i uruchomić poniżej; bez niego dostępne są funkcje komend i pamięci.",
                 11, MUTED, false);
         info.setLineSpacing(dp(3), 1f);
         info.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -864,7 +864,7 @@ public final class CortanaAssistantActivity extends Activity {
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(25000);
                 connection.setReadTimeout(60000);
-                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/0.8.0");
+                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/1.0.0");
                 connection.setRequestProperty("Accept", "application/octet-stream");
                 int status = connection.getResponseCode();
                 if (status != HttpURLConnection.HTTP_OK) {
@@ -1030,7 +1030,7 @@ public final class CortanaAssistantActivity extends Activity {
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(25000);
                 connection.setReadTimeout(90000);
-                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/0.8.0");
+                connection.setRequestProperty("User-Agent", "QwantSYS-Launcher/1.0.0");
                 connection.setRequestProperty("Accept", "application/octet-stream");
                 int status = connection.getResponseCode();
                 if (status != HttpURLConnection.HTTP_OK) {

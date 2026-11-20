@@ -102,3 +102,25 @@ See [Semantic Memory Core 0.8.0 technical notes](docs/SEMANTIC_MEMORY_0.8.0.md).
 To switch back, open Android Settings → Apps → Default apps → Home app and select the REDMAGIC launcher.
 
 See [QwantOS Android Home Overlay 0.9.0 technical design](docs/QWANTOS_ANDROID_OVERLAY_0.9.0.md).
+
+
+## QwantOS System Diagnostics — 1.0.0
+
+QwantOS 1.0.0 adds an on-device diagnostic report for the Android Home Shell prototype.
+
+- The diagnostics screen reports device model, Android/API, ABI and whether QwantOS currently holds the Android HOME role.
+- It distinguishes the native JNI library being available from the Qwen/E5 model files being present and the inference engines being loaded. These are separate states; a library being present does not prove inference has been tested on the handset.
+- It reports local memory record counts and the semantic-embedding index counts without exposing note contents.
+- It shows available RAM and app data storage using Android APIs.
+- The report is generated locally. It is copied to the clipboard only after the user taps **Kopiuj raport**.
+- No root, special system permission, telemetry endpoint or cloud upload is added.
+
+### Version metadata
+
+The Android Gradle configuration and the manual APK workflow both use versionCode `10` and versionName `1.0.0`. This keeps the package metadata aligned.
+
+### Validation
+
+GitHub Actions verifies compilation, JNI packaging and APK signing. It cannot verify the vendor-specific Home role flow or real model inference on a physical REDMAGIC 7. Those checks remain on-device acceptance tests.
+
+See [QwantOS System Diagnostics 1.0.0](docs/QWANTOS_SYSTEM_DIAGNOSTICS_1.0.0.md).

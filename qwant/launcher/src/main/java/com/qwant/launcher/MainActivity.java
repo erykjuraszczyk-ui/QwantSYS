@@ -150,7 +150,7 @@ public final class MainActivity extends Activity {
         brand.setPadding(dp(12), 0, 0, 0);
         TextView name = text("QWANT", 21, WHITE, true);
         name.setLetterSpacing(0.12f);
-        TextView version = text("QWANTOS SHELL  /  0.9.0", 9, MUTED, true);
+        TextView version = text("QWANTOS SHELL  /  1.0.0", 9, MUTED, true);
         version.setLetterSpacing(0.07f);
         brand.addView(name);
         brand.addView(version);
@@ -252,6 +252,9 @@ public final class MainActivity extends Activity {
         actionsC.addView(actionCard("⌂", "Domyślny pulpit", "Zarządzaj ekranem Home", this::openHomeSettings), fullWidth());
         page.addView(actionsC);
 
+        section(page, "DIAGNOSTYKA QWANTOS", "Kontrola lokalnych komponentów i raport urządzenia");
+        page.addView(actionCard("⌘", "Diagnostyka systemu", "Sprawdź HOME, JNI, modele AI i lokalną pamięć", () -> QwantSystemDiagnostics.show(this)), fullWidth());
+
         section(page, "CORTANA / AI INTERFACE", "Rozmowa tekstowa, pamięć lokalna i wejście głosowe");
         page.addView(actionCard("✧", "Uruchom Cortanę", "Asystent Qwant • tryb lokalny", this::openCortana), fullWidth());
 
@@ -265,7 +268,7 @@ public final class MainActivity extends Activity {
         aiCard.addView(aiNote);
         page.addView(aiCard, fullWidth());
 
-        section(page, "INFORMACJE O URZĄDZENIU", "QwantOS 0.9.0 • testowa nakładka Androida");
+        section(page, "INFORMACJE O URZĄDZENIU", "QwantOS 1.0.0 • testowa nakładka Androida");
         detailValue = text("Ładowanie danych urządzenia…", 11, MUTED, false);
         detailValue.setPadding(dp(14), dp(12), dp(14), dp(12));
         detailValue.setBackground(round(PANEL, LINE, 15));
@@ -847,7 +850,7 @@ public final class MainActivity extends Activity {
         addMonitorSection(content, "OGRANICZENIA", "Aplikacja nie ma uprawnień root ani systemowego DUMP. Część odczytów CPU i temperatur może być niedostępna w sandboxie Androida.");
 
         new AlertDialog.Builder(this)
-                .setTitle("QwantOS Hardware Monitor  •  0.9.0")
+                .setTitle("QwantOS Hardware Monitor  •  1.0.0")
                 .setView(scroll)
                 .setPositiveButton("Odśwież pulpit", (d, w) -> refreshMetrics())
                 .setNegativeButton("Zamknij", null)
