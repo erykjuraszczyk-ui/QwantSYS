@@ -17,6 +17,11 @@
         android:usesCleartextTraffic="false">
 
         <activity
+            android:name=".CortanaAssistantActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified" />
+
+        <activity
             android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true"

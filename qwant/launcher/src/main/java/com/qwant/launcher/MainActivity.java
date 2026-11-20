@@ -235,6 +235,9 @@ public final class MainActivity extends Activity {
         actionsC.addView(actionCard("⌂", "Domyślny pulpit", "Zarządzaj ekranem Home", this::openHomeSettings), fullWidth());
         page.addView(actionsC);
 
+        section(page, "CORTANA / AI INTERFACE", "Rozmowa tekstowa, pamięć lokalna i wejście głosowe");
+        page.addView(actionCard("✧", "Uruchom Cortanę", "Asystent Qwant • tryb lokalny", this::openCortana), fullWidth());
+
         section(page, "WARSTWA OBLICZENIOWA", "AI i akceleratory");
         LinearLayout aiCard = cardContainer(PANEL, 17);
         TextView aiTitle = text("ANDROID NNAPI", 15, WHITE, true);
@@ -933,6 +936,14 @@ public final class MainActivity extends Activity {
                 .setPositiveButton("Ustawienia zabezpieczeń", (d, w) -> openSettings(Settings.ACTION_SECURITY_SETTINGS))
                 .setNegativeButton("Zamknij", null)
                 .show();
+    }
+
+    private void openCortana() {
+        try {
+            startActivity(new Intent(this, CortanaAssistantActivity.class));
+        } catch (RuntimeException ex) {
+            Toast.makeText(this, "Nie można uruchomić Cortana AI.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void openHomeSettings() {
